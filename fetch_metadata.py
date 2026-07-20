@@ -14,8 +14,10 @@ Resumable: on re-run it reuses metadata already fetched and only fills in
 missing transcripts, and it won't re-hammer videos whose transcripts are
 permanently disabled/absent. So a rate-limit or crash mid-run costs nothing.
 
-Intermediate step in the backlog pipeline: no menu, just run it. Input comes
-from grab_watchlist.py; output feeds the summarizer.
+Intermediate step in the backlog pipeline. Input comes from grab_watchlist.py;
+output feeds the summarizer. The one interactive bit is a startup prompt for
+how to route transcript requests (direct / Webshare / a proxies.txt pool),
+since that's the step YouTube rate-limits per IP.
 
 Deps: yt-dlp on PATH, youtube-transcript-api.
 """
@@ -30,7 +32,9 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import requests
 
 # YouTube titles carry emoji and non-Latin scripts; the default Windows console
 # is cp1252 and print() raises UnicodeEncodeError on anything outside it. Force
@@ -44,12 +48,35 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     TranscriptsDisabled, NoTranscriptFound, RequestBlocked, IpBlocked,
 )
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INPUT = os.path.join(HERE, "watchlist.txt")
 JSON_OUT = os.path.join(HERE, "metadata.json")
 CSV_OUT = os.path.join(HERE, "metadata.csv")
 FAIL_OUT = os.path.join(HERE, "failures.csv")
+PROXIES_FILE = os.path.join(HERE, "proxies.txt")
+
+# Machine-managed pool for mode 2, separate from the hand-edited proxies.txt.
+# proxyscrape is the primary source - it tests proxies itself and reports
+# liveness ('alive') and measured latency ('timeout'), so filtering/ordering
+# happens at fetch time instead of us ever having to learn it the hard way.
+# proxifly is kept as a cheap fallback (no filtering/latency data of its own)
+# in case proxyscrape's API ever changes shape or goes away - cheap enough to
+# leave in even though proxyscrape is expected to make it redundant.
+FREE_PROXIES_FILE = os.path.join(HERE, "free_proxies.json")
+PROXYSCRAPE_URL = "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&format=json"
+PROXIFLY_URL = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.json"
+# These lists reportedly churn every 1-30 minutes, so caching for hours would
+# just mean re-trying proxies that died long ago; 30 min balances that against
+# not re-fetching on every single re-run of a resumed batch.
+FREE_PROXY_REFRESH_MINUTES = 30
+# youtube-transcript-api never sets a request timeout anywhere internally -
+# confirmed by reading its source - so a proxy that connects but never
+# responds would hang forever instead of failing fast. FREE_PROXY_TIMEOUT is
+# injected via TimeoutSession specifically for mode 2, where most candidates
+# are expected to be dead and need to fail fast so rotation can move on.
+FREE_PROXY_TIMEOUT = 8
 
 # yt-dlp's full dump is ~99% download plumbing (formats, automatic_captions,
 # thumbnails, heatmap) that's useless for backlog triage and bloats the JSON to
@@ -206,6 +233,250 @@ def fetch_transcript(api, video_id):
     return text, len(raw), "ok", track.language_code
 
 
+class TimeoutSession(requests.Session):
+    """A plain requests.Session has no default per-call timeout, and
+    youtube-transcript-api never passes one - so without this, a dead-but-not-
+    actively-refusing proxy hangs forever. Injects a default timeout on every
+    request unless the caller explicitly overrides it."""
+
+    def __init__(self, timeout):
+        super().__init__()
+        self._default_timeout = timeout
+
+    def request(self, *args, **kwargs):
+        kwargs.setdefault("timeout", self._default_timeout)
+        return super().request(*args, **kwargs)
+
+
+class ApiPool:
+    """One or more YouTubeTranscriptApi instances to draw transcript requests
+    from. Default and Webshare modes are pools of exactly one - Webshare's own
+    gateway already rotates IPs internally when it hits a 429, so there's
+    nothing left for us to do there. A generic proxy pool is the one case
+    where rotation is our job: each GenericProxyConfig is just one fixed
+    proxy with no rotation of its own, so transcript_pass rotates through the
+    pool itself whenever the current entry fails.
+
+    keys carries the raw proxy URL behind each entry (None for the single-IP
+    modes, which have nothing to persist) so a failure can be recorded back
+    into free_proxies.json after the run - and so rotate() can skip anything
+    already proven bad this run instead of possibly cycling back to it."""
+
+    def __init__(self, apis, labels, keys=None):
+        self.apis = apis
+        self.labels = labels
+        self.keys = keys or [None] * len(apis)
+        self.idx = 0
+        self.failed_keys = set()
+        self.ok_keys = set()
+        self.latencies = {}  # proxy URL -> seconds for its successful fetch, for next run's ordering
+
+    @property
+    def current(self):
+        return self.apis[self.idx]
+
+    @property
+    def label(self):
+        return self.labels[self.idx]
+
+    @property
+    def key(self):
+        return self.keys[self.idx]
+
+    def rotate(self):
+        """Advance to the next proxy that hasn't already failed this run,
+        wrapping around. False if there's only one entry, or every other
+        entry in the pool has already failed - nothing left to try."""
+        if len(self.apis) <= 1:
+            return False
+        if self.keys[self.idx]:
+            self.failed_keys.add(self.keys[self.idx])
+        for _ in range(len(self.apis)):
+            self.idx = (self.idx + 1) % len(self.apis)
+            if self.keys[self.idx] is None or self.keys[self.idx] not in self.failed_keys:
+                return True
+        return False
+
+
+def read_proxies(path):
+    """One proxy URL per line for mode 2 (scheme://[user:pass@]host:port).
+    Blank lines and #-comments are ignored."""
+    if not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+
+
+def load_free_proxy_pool(path):
+    """Persisted record of every free proxy we've ever seen and what happened
+    last time we tried it. Corrupt/missing just means starting empty, same
+    resilience pattern as load_existing() for metadata.json."""
+    if not os.path.isfile(path):
+        return {"last_refreshed": None, "proxies": {}}
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"last_refreshed": None, "proxies": {}}
+
+
+def save_free_proxy_pool(pool_data, path):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(pool_data, f, indent=2)
+
+
+def fetch_proxyscrape_urls():
+    """Primary source. Filtered to ssl=True (https-capable) since YouTube is
+    all-TLS - a proxy without CONNECT/TLS support fails every request here
+    regardless of speed - and alive=True (proxyscrape's own live-tested
+    flag), sorted by their measured 'timeout' ascending. All of that comes
+    from proxyscrape's own data; nothing here is us testing anything."""
+    try:
+        with urllib.request.urlopen(PROXYSCRAPE_URL, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        print(f"  couldn't fetch proxyscrape: {type(e).__name__}")
+        return []
+    candidates = [p for p in data.get("proxies", []) if p.get("ssl") and p.get("alive")]
+    candidates.sort(key=lambda p: p.get("timeout", float("inf")))
+    return [f"http://{p['ip']}:{p['port']}" for p in candidates if p.get("ip") and p.get("port")]
+
+
+def fetch_proxifly_urls():
+    """Cheap fallback with no filtering/latency data of its own - only
+    matters if proxyscrape's API ever changes shape or goes away."""
+    try:
+        with urllib.request.urlopen(PROXIFLY_URL, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return [p["proxy"] for p in data if p.get("proxy")]
+    except Exception as e:
+        print(f"  couldn't fetch proxifly (fallback): {type(e).__name__}")
+        return []
+
+
+def fetch_free_proxy_urls():
+    """proxyscrape first (already filtered to https-capable+alive, sorted by
+    its own measured latency), then proxifly appended as a fallback -
+    dict.fromkeys dedupes while preserving that priority order."""
+    urls = fetch_proxyscrape_urls() + fetch_proxifly_urls()
+    return list(dict.fromkeys(urls))
+
+
+def refresh_free_proxy_pool(path):
+    """Re-grabs the free proxy lists only if the persisted pool is missing or
+    older than FREE_PROXY_REFRESH_MINUTES - these lists churn fast enough that
+    caching much longer would mean re-trying proxies that died hours ago, but
+    re-fetching on every single re-run of a resumed batch would be wasteful.
+
+    Newly-seen proxies are appended as 'untested'. Proxies we've already
+    proven 'ok' or 'failed' keep that status rather than being reset - the
+    whole point is not re-trying something we already know is dead."""
+    pool_data = load_free_proxy_pool(path)
+    last = pool_data.get("last_refreshed")
+    stale = last is None or (
+        datetime.now() - datetime.fromisoformat(last) > timedelta(minutes=FREE_PROXY_REFRESH_MINUTES)
+    )
+    if not stale:
+        return pool_data
+
+    print(f"  refreshing free proxy pool (last grabbed: {last or 'never'})...")
+    fresh_urls = fetch_free_proxy_urls()
+    proxies = pool_data.setdefault("proxies", {})
+    added = 0
+    for u in fresh_urls:
+        if u not in proxies:
+            proxies[u] = {"status": "untested"}
+            added += 1
+    pool_data["last_refreshed"] = datetime.now().isoformat()
+    save_free_proxy_pool(pool_data, path)
+    print(f"  {len(fresh_urls)} seen, {added} new, {len(proxies) - added} already known.")
+    return pool_data
+
+
+def record_pool_results(pool, pool_data, path):
+    """Writes this run's outcomes back into the persisted free-proxy pool -
+    anything that failed is marked so future runs skip it outright; anything
+    that worked is marked 'ok' (plus the latency of that successful fetch, so
+    build_pool can try the fastest known-good proxies first next time - no
+    separate speed-check pass needed, it's just the real fetch's own timing).
+    No-op for modes 0/1 (keys are all None there, nothing to persist)."""
+    proxies = pool_data.setdefault("proxies", {})
+    changed = False
+    for key in pool.failed_keys:
+        if key in proxies:
+            proxies[key]["status"] = "failed"
+            changed = True
+    for key in pool.ok_keys:
+        if key in proxies:
+            proxies[key]["status"] = "ok"
+            if key in pool.latencies:
+                proxies[key]["latency_ms"] = round(pool.latencies[key] * 1000)
+            changed = True
+    if changed:
+        save_free_proxy_pool(pool_data, path)
+
+
+def select_transcript_mode():
+    """Numbered pick for how transcript requests get routed. Mirrors
+    grab_watchlist.py's browser picker: 0 is the safe default, and it
+    re-prompts on bad input rather than guessing what you meant."""
+    print("How should transcript requests be routed?")
+    print("  0) Default  - this machine's own IP, spaced out per the delay tiers below.")
+    print("  1) Webshare - your Webshare rotating-residential-proxy account")
+    print("                (env vars WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD).")
+    print("  2) Generic  - your own proxies.txt entries plus an auto-refreshed pool of")
+    print("                free public proxies; rotates to the next one immediately")
+    print("                on any failure (most are dead/already blocked - expect that).")
+    while True:
+        choice = input("Mode [0]: ").strip()
+        if choice == "":
+            return "0"
+        if choice in ("0", "1", "2"):
+            return choice
+        print("  Enter 0, 1, or 2.")
+
+
+def build_pool(mode):
+    """Turns the chosen mode into an ApiPool. Modes 1/2 fall back to the
+    default (no proxy) with an explanatory message if they aren't actually
+    configured yet, rather than silently doing nothing or crashing."""
+    if mode == "1":
+        user = os.environ.get("WEBSHARE_PROXY_USERNAME")
+        pw = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+        if user and pw:
+            cfg = WebshareProxyConfig(proxy_username=user, proxy_password=pw)
+            return ApiPool([YouTubeTranscriptApi(proxy_config=cfg)], ["Webshare"])
+        print("  WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD aren't set.")
+        print("  Get them from https://dashboard.webshare.io/proxy/settings, set both,")
+        print("  and re-run. Falling back to the default (no proxy) for this run.")
+    elif mode == "2":
+        manual_urls = read_proxies(PROXIES_FILE)
+        pool_data = refresh_free_proxy_pool(FREE_PROXIES_FILE)
+        free_proxies = pool_data.get("proxies", {})
+        # Known-good first, fastest measured latency first among those (best
+        # odds of an immediate, quick success), then untested (no timing yet),
+        # never anything already proven 'failed'. Latency comes from the real
+        # fetch that already succeeded last time - no separate speed check.
+        # Manual entries always count, on the assumption you added them on purpose.
+        ok = sorted((u for u, info in free_proxies.items() if info.get("status") == "ok"),
+                    key=lambda u: free_proxies[u].get("latency_ms", float("inf")))
+        untested = [u for u, info in free_proxies.items() if info.get("status") == "untested"]
+        urls = list(dict.fromkeys(manual_urls + ok + untested))
+        if urls:
+            apis = [YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=u, https_url=u),
+                                          http_client=TimeoutSession(FREE_PROXY_TIMEOUT))
+                    for u in urls]
+            labels = [f"proxy {i + 1}/{len(urls)}" for i in range(len(urls))]
+            print(f"  Pool: {len(manual_urls)} manual + {len(ok)} known-good + {len(untested)} "
+                  f"untested free proxies ({len(free_proxies) - len(ok) - len(untested)} known-bad skipped).")
+            p = ApiPool(apis, labels, keys=urls)
+            p.pool_data, p.pool_data_path = pool_data, FREE_PROXIES_FILE  # so main() can persist results after
+            return p
+        print("  No usable proxies - proxies.txt is empty and the free-proxy pool came up empty too.")
+        print("  Falling back to the default (no proxy) for this run.")
+    return ApiPool([YouTubeTranscriptApi()], ["default (no proxy)"])
+
+
 def load_existing(path):
     """Prior output keyed by id, for resume. A corrupt/half-written file just
     means we start fresh rather than crash - the data is re-fetchable."""
@@ -290,55 +561,93 @@ def write_csv(records, path):
             writer.writerow(row)
 
 
-def transcript_pass(records):
+def transcript_pass(records, pool):
     """Fill in transcripts for records that don't have a settled one yet.
     Reuses 'ok' transcripts and skips permanently disabled/absent ones, so a
     resume run only works on what's actually outstanding.
 
-    Spacing scales with the batch size. Stops immediately on a block (explicit
-    'blocked', or a short run of generic errors) - a YouTube IP block lasts hours
-    to a day, so there's nothing to wait out mid-run. Progress is saved either
-    way (records are mutated in place and written by the caller), so a later
-    re-run resumes exactly where this left off. Ctrl-C is safe for the same reason."""
+    Single-IP pools (modes 0/1) keep the original spaced-out, tolerant-of-a-
+    few-transient-errors behavior - there's exactly one IP whose reputation is
+    worth protecting, and delay is what protects it. Multi-proxy pools (mode
+    2) drop both: with dozens to hundreds of disposable, mostly-already-dead
+    candidates, pacing doesn't protect anything we intend to reuse, and
+    tolerating a few errors before reacting just means burning through several
+    real videos on a proxy that was simply never going to answer. So there,
+    any failure (blocked or a plain error) rotates immediately.
+
+    On a failure, tries pool.rotate() first - if there's another proxy to fall
+    back to, the same video is retried on it rather than being marked done.
+    Only stops for good once rotate() reports nothing left to try. Progress is
+    saved either way (records are mutated in place and written by the
+    caller), so a later re-run resumes exactly where this left off. Ctrl-C is
+    safe for the same reason."""
     todo = [r for r in records
             if r.get("transcript_status") not in ({"ok"} | PERMANENT_TRANSCRIPT_STATES)]
     if not todo:
         print("Transcripts: nothing outstanding.")
         return
 
+    rotating_pool = len(pool.apis) > 1
     base = request_delay_base(len(todo))
-    est_min = round(len(todo) * base / 60)
-    print(f"Transcripts: {len(todo)} to fetch, ~{base:.0f}s apart (est ~{est_min} min). "
-          f"Ctrl-C is safe - progress is saved.")
-    api = YouTubeTranscriptApi()
+    if rotating_pool:
+        print(f"Transcripts: {len(todo)} to fetch via {pool.label} (pool of {len(pool.apis)}) - "
+              f"no artificial delay, rotates immediately on any failure. Ctrl-C is safe - progress is saved.")
+    else:
+        est_min = round(len(todo) * base / 60)
+        print(f"Transcripts: {len(todo)} to fetch, ~{base:.0f}s apart (est ~{est_min} min) via "
+              f"{pool.label}. Ctrl-C is safe - progress is saved.")
+
     consecutive_errors = 0
-    stopped = None  # reason string once we decide the IP is blocked
+    stopped = None  # reason string once we decide the pool is exhausted
+    i = 0
 
     try:
-        for n, rec in enumerate(todo, 1):
-            text, segs, status, lang = fetch_transcript(api, rec["id"])
+        while i < len(todo):
+            rec = todo[i]
+            t0 = time.time()
+            text, segs, status, lang = fetch_transcript(pool.current, rec["id"])
+            elapsed = time.time() - t0
             rec["transcript_text"] = text
             rec["transcript_segments"] = segs
             rec["transcript_status"] = status
             rec["transcript_language"] = lang
             tag = f"{status}/{lang}" if lang else status
-            label = f"[{n}/{len(todo)}] {tag:11} {rec.get('title') or rec['id']}"
+            label = f"[{i + 1}/{len(todo)}] {tag:11} {rec.get('title') or rec['id']} ({pool.label})"
             print(f"\r{label[:78]:<78}", end="", flush=True)
 
-            # Two block signals, both meaning the IP is blocked (hours-to-a-day),
-            # not that these videos are bad. Stop rather than grind; resume later.
-            if status == "blocked":
-                stopped = "YouTube is blocking this IP (RequestBlocked/IpBlocked)."
-                break
+            block_signal = status == "blocked"
             if status == "error":
-                consecutive_errors += 1
-                if consecutive_errors >= CONSECUTIVE_ERROR_LIMIT:
-                    stopped = f"{consecutive_errors} errors in a row - the IP looks blocked."
-                    break
+                if rotating_pool:
+                    block_signal = True  # no tolerance - a disposable proxy that errors once is done
+                else:
+                    consecutive_errors += 1
+                    if consecutive_errors >= CONSECUTIVE_ERROR_LIMIT:
+                        block_signal = True
             else:
                 consecutive_errors = 0
+                if status == "ok" and pool.key:
+                    pool.ok_keys.add(pool.key)
+                    pool.latencies[pool.key] = elapsed
 
-            if n < len(todo):
+            if block_signal:
+                old_label = pool.label
+                if status == "blocked":
+                    reason = "blocked"
+                elif rotating_pool:
+                    reason = "error"  # no tolerance here, so this is always the first and only one
+                else:
+                    reason = f"{consecutive_errors} errors in a row"
+                if pool.rotate():
+                    consecutive_errors = 0
+                    print(f"\n  {reason} on {old_label} - rotating to {pool.label}")
+                    continue  # retry this same video on the newly-rotated proxy
+                stopped = ("YouTube is blocking this IP (RequestBlocked/IpBlocked)." if status == "blocked"
+                           else f"{consecutive_errors} errors in a row - the IP looks blocked." if not rotating_pool
+                           else "every proxy in the pool has now failed - none left to rotate to.")
+                break
+
+            i += 1
+            if i < len(todo) and not rotating_pool:
                 time.sleep(random.uniform(base * (1 - DELAY_JITTER), base * (1 + DELAY_JITTER)))
     except KeyboardInterrupt:
         stopped = "interrupted (Ctrl-C)."
@@ -360,12 +669,19 @@ def transcript_pass(records):
         print(f"  STOPPED: {stopped}")
         print(f"  {outstanding} left unsettled (retryable on the next run). To get past a block:")
         print("    - wait ~24-48h for YouTube to clear this IP, then re-run (resume continues)")
-        print("    - switch the transcript step to yt-dlp (not blocked on this IP)")
-        print("    - route through a residential proxy (WebshareProxyConfig / GenericProxyConfig)")
+        print("    - re-run and pick mode 1 (Webshare) or 2 (your own proxy pool) instead")
 
 
 def main():
     print("fetch_metadata")
+    print("Fetches yt-dlp metadata and youtube-transcript-api transcripts for every")
+    print("video in watchlist.txt, resuming from metadata.json so re-runs only fetch")
+    print("what's still missing.")
+    print()
+    mode = select_transcript_mode()
+    pool = build_pool(mode)
+
+    print()
     print(f"Reading IDs from {INPUT}")
 
     if not os.path.isfile(INPUT):
@@ -401,7 +717,9 @@ def main():
         print(f"  Wrote {FAIL_OUT}")
 
     print()
-    transcript_pass(records)
+    transcript_pass(records, pool)
+    if getattr(pool, "pool_data", None) is not None:
+        record_pool_results(pool, pool.pool_data, pool.pool_data_path)
 
     if records:
         json_path = resilient_write(lambda p: write_json(records, p), JSON_OUT)
