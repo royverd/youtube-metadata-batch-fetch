@@ -1,32 +1,219 @@
 id,title,channel,uploader,channel_id,upload_date,duration,duration_string,view_count,like_count,comment_count,age_limit,availability,live_status,language,webpage_url,description,categories,tags,chapters,transcript_status,transcript_language,transcript_segments
-YDV1mo7QlnA,How To Study Hard - Richard Feynman,Arjun Kocher,Arjun Kocher,UCTdWoC0b3WqNNnZ9lRtbmlw,20230207,198,3:18,5189982,231812,1900,0,public,not_live,en,https://www.youtube.com/watch?v=YDV1mo7QlnA,"“Study hard what interests you the most in the most undisciplined, irreverent and original manner possible. - Richard Feynman
+g9JIUM0MHgQ,CLI vs MCP: How AI Agents Choose the Right Tool for the Job,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260504,846,14:06,113935,2879,147,0,public,not_live,en,https://www.youtube.com/watch?v=g9JIUM0MHgQ,"Learn more about MCP here → https://ibm.biz/~92j1qki7Y
 
-Interviews in order of appearance:
+Both CLI and MCP are ways for AI agents to interact with the world. Martin Keen explains how agents use CLI commands or MCP tools for tasks across real developer workflows. Learn how context windows, schemas, and practical examples shape smarter AI development. 🚀
 
-Richard Feynman
-https://youtu.be/P1ww1IXRfTA
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~o4HUHwcNB
 
-John Carmack
-https://youtu.be/I845O57ZSy4
+#aiagents #mcp #aidevelopment","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,130
+ZVPlLaehjLk,"Agentic AI Frameworks Explained: Workflows, Multi-Agent, & Production",IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260709,713,11:53,33203,1160,47,0,public,not_live,en,https://www.youtube.com/watch?v=ZVPlLaehjLk,"Learn more about AI Agent Frameworks here → https://ibm.biz/~M1qnwGHnE
 
-Kevin Systrom 
-https://youtu.be/3pvpNKUPbIY
+Too many agentic AI frameworks and no clear starting point. 🤯 Meenakshi Kodati breaks down agentic AI frameworks like LangChain, AutoGen, and CrewAI across workflows, multi-agent systems, and production use cases. Learn how to choose the right framework based on your system design and real-world needs.
 
-Andrej Karpathy
-https://youtu.be/cdiD-9MMpb0
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~YOhBiYsX4
 
-background music: 
-Sid Acharya - Faliing Through the Hourglass
-https://m.youtube.com/watch?v=i4yRbeiu6M0","[""Education""]",[],,ok,en,97
-4MAupwjl3pc,The Art Of Winning In Tech,Lattice,Lattice,UC2d2M7zinQWZU4-oD0nlORg,20260529,384,6:24,490413,26952,428,0,public,not_live,en,https://www.youtube.com/watch?v=4MAupwjl3pc,"Try Brilliant's new tutor for free: https://brilliant.org/lattice
-Get 20% off an annual Premium subscription when you sign up.
+#agenticai #aiagents #langchain #aiframeworks","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,153
+Lg-meK5IU8Q,What AI Agent Skills Are and How They Work,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260420,745,12:25,340234,8631,228,0,public,not_live,en,https://www.youtube.com/watch?v=Lg-meK5IU8Q,"Ready to become a certified watsonx Generative AI Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdpPUq
 
-THUMBNAIL/TITLE CREDIT: DEKOSOPHY
-Dekosophy had a great thumbnail/title and I thought it applied well to computer science, which is why I made this video. Check his channel out, he makes great content.
+Learn more about AI Agents here → https://ibm.biz/BdpPUP
 
-This video is sponsored by Brilliant.
+We're all using AI agents, but they still lack the procedural knowledge real work needs. Martin Keen explains how agent skills, LLMs, RAG, and MCP help agents follow workflows, automate tasks, and make smarter decisions. Learn how to build better AI agents. 🤖
 
-#programming #code #coding #webdevelopment #computerscience","[""Education""]",[],,ok,en,228
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdpPUy
+
+ #aiagents #agentskills #llm #mcp","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,150
+k5jYwyhDMxA,5 AI Agent Terms You Need to Know,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260623,667,11:07,66615,2185,56,0,public,not_live,en,https://www.youtube.com/watch?v=k5jYwyhDMxA,"Learn more about AI Agents here → https://ibm.biz/~dXkrYnDwR
+
+Frontier AI agents rely on more than just large language models to function effectively. Martin Keen explains five essential concepts in agentic AI, including agents.md, agent skills, MCP, agent‑to‑agent communication, and sub‑agents. These terms define how modern AI agents actually work.
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~R5QxgtWK0
+
+#aiagents #agenticai #aiarchitecture #mcp","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,136
+phOhGqpXss4,Predictive vs Generative AI: How They Work and When to Use Each,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260511,719,11:59,53070,3017,94,0,public,not_live,en,https://www.youtube.com/watch?v=phOhGqpXss4,"Learn more about Predictive AI vs Generative AI here → https://ibm.biz/BdpPNf
+
+Predictive AI asks what will happen, while generative AI asks what it could look like. Martin Keen  explains how LLMs, machine learning models, and diffusion systems differ in outputs, data, and real use cases. Learn how to choose the right AI approach.
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdpPNq
+
+#generativeai #llm #predictiveai","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,114
+EDb37y_MhRw,Generative vs Agentic AI: Shaping the Future of AI Collaboration,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250421,438,7:18,1274574,16427,520,0,public,not_live,,https://www.youtube.com/watch?v=EDb37y_MhRw,"Ready to become a certified watsonx AI Assistant Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdndTY
+
+Want to learn more about Agentic AI + Data? Register here →  https://ibm.biz/BdeGLe
+
+Learn more about Agentic AI + Data here →  https://ibm.biz/BdeGLe
+
+What’s the difference between generative AI and agentic AI? 🤔 Martin Keen explains how generative AI powers content creation and image generation, while agentic AI uses LLMs and chain of thought reasoning for proactive tasks like personal shopping and conference planning. Discover the future of intelligent AI collaboration! 🚀
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdndTz
+
+#generativeai #agenticai #ai #llm","[""Education""]","[""IBM"", ""IBM Cloud""]","[{""start_time"": 0, ""title"": ""Intro"", ""end_time"": 15}, {""start_time"": 15, ""title"": ""Generative AI"", ""end_time"": 44}, {""start_time"": 44, ""title"": ""Generative AI Examples"", ""end_time"": 65}, {""start_time"": 65, ""title"": ""Generative AI Overview"", ""end_time"": 151}, {""start_time"": 151, ""title"": ""Common Foundation"", ""end_time"": 199}, {""start_time"": 199, ""title"": ""Real World Applications"", ""end_time"": 325}, {""start_time"": 325, ""title"": ""Chain of Thought Reasoning"", ""end_time"": 438}]",ok,en,81
+B_RrXwDupIg,CAG vs Long Context: How AI Models Use and Remember Information,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260521,658,10:58,30093,972,42,0,public,not_live,en,https://www.youtube.com/watch?v=B_RrXwDupIg,"Learn more about AI Models here → https://ibm.biz/~Yk0OZilIN
+
+Long context and CAG are two powerful ways to give AI access to external knowledge. Martin Keen explains how long context, CAG, KV cache, and prompt caching let LLMs process documents faster and more efficiently 🤖. Learn when each method is best for real-world AI workloads.
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~0Z28hPp8U
+
+#ai #llm #aimodel #cag","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,98
+-W2JdSl1v48,"Is Fine-Tuning Still Needed? LLMs, RAG, & LoRA",IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260721,652,10:52,16088,727,60,0,public,not_live,en,https://www.youtube.com/watch?v=-W2JdSl1v48,"Learn more about Fine-Tuning here → https://ibm.biz/~c5OKNxoyO
+
+Is fine-tuning still needed for modern AI workflows? Martin Keen explains how LLM fine tuning compares to RAG, LoRA, and generative AI techniques. Learn when to customize machine learning models and how to design efficient AI systems.
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~zn4aDcdla
+
+#finetuning #llm #generativeai #machinelearning","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,118
+gl1r1XV0SLw,What is a Vector Database? Powering Semantic Search & AI Applications,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250324,588,9:48,900203,19713,459,0,public,not_live,,https://www.youtube.com/watch?v=gl1r1XV0SLw,"Ready to become a certified Qiskit Developer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdG5uz
+
+Learn more about Vector Databases here → https://ibm.biz/BdG5uq
+
+How can you find images with similar color palettes or landscapes? 🖼️ Martin Keen explains how vector databases use vector embeddings to bridge the semantic gap, enabling advanced semantic search. 🌐 Explore AI innovations like retrieval-augmented generation (RAG) and efficient similarity searches. 🚀
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdG5uf
+
+#vectordatabase #semanticsearch #aiapplications #machinelearning","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,109
+zYGDpG-pTho,RAG vs Fine-Tuning vs Prompt Engineering: Optimizing AI Models,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250414,790,13:10,691418,12388,216,0,public,not_live,,https://www.youtube.com/watch?v=zYGDpG-pTho,"Ready to become a certified watsonx AI Assistant Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdndTs
+
+Learn more about RAG vs. Fine-Tuning vs. Prompt Engineering here → https://ibm.biz/BdndTi
+
+How do AI chatbots deliver better responses? 🤔 Martin Keen explains RAG 🛠️, fine-tuning 🎯, and prompt engineering ✏️—methods that extend knowledge, refine responses, and build domain expertise. Learn how these strategies optimize large language models and improve AI outputs today! 🚀
+
+AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdndTj
+
+#retrievalaugmentedgeneration #finetuning #promptengineering","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,146
+Pn95eOlw5qk,"Complete Agentic AI Course - AI Agents, RAG, Embeddings, Architectures, Framework, VectorDB & Memory",Tejas AI,Tejas AI,UCMbdQplFb-X4SyrCG4PLI7A,20260618,2216,36:56,139181,5273,131,0,public,not_live,en,https://www.youtube.com/watch?v=Pn95eOlw5qk,"Complete Agentic AI Course - AI Agents, RAG, Embeddings, Architectures, Framework, VectorDB & Memory #aiagents #agenticai #aiforbeginners #learnai #ai #2026 
+
+Join Our Discord Server :- https://discord.gg/2abyjxr4v6
+
+🤖 Learn Agentic AI — AI Agents Explained (A Complete Powerful Course to Master It)
+
+This is the most comprehensive Agentic AI course you'll find — completely FREE. We go from the absolute ground up — AI basics, LLMs, the Agent loop — all the way to Vector Databases, RAG, MCP, Multi-Agent Systems, and real architectures being used in production RIGHT NOW in 2026.
+
+Whether you're a total beginner or someone who's used AI tools but never truly understood them — this video is built for you.
+
+📌 WHAT YOU'LL LEARN IN THIS VIDEO:
+
+✅ What AI actually is — and the 3 eras that brought us here
+✅ How Transformers & the Attention Mechanism changed everything (2017 → now)
+✅ How LLMs generate text — tokens, temperature, and context windows explained
+✅ The EXACT difference between a Chatbot and a true AI Agent
+✅ The Core Agent Loop (Perceive → Think → Act → Observe) broken down simply
+✅ The ReAct Pattern — how agents reason before every single action
+✅ Tools & Function Calling — how agents interact with the real world
+✅ Memory systems — Sensory, Working, Episodic, and Semantic memory
+✅ RAG (Retrieval-Augmented Generation) — the most important AI dev concept right now
+✅ Vector Databases — Pinecone, Weaviate, Qdrant, Chroma & when to use each
+✅ Embeddings & Semantic Search — the math made simple
+✅ MCP (Model Context Protocol) — the ""USB port"" for AI, explained clearly
+✅ 6 Agentic Architectures — ReAct, Chain-of-Thought, Plan-and-Execute, Tree of Thoughts, Reflexion & LATS
+✅ Multi-Agent Systems — Orchestrator-Worker, Parallel, Debate Pattern & more
+✅ Frameworks — LangChain, LlamaIndex, AutoGen, CrewAI
+✅ Advanced patterns — Self-Modifying Agents, Stochastic Consensus, Iceberg Technique, 60-30-10 Cost Rule
+✅ Safety & Guardrails — Prompt Injection, Scope Creep, Human-in-the-Loop & more
+✅ Real-world use cases across Enterprise, Healthcare, Finance, Education & Dev
+✅ A step-by-step 10-week roadmap to go from zero to building production agents
+
+💡 Key Insight:
+
+A chatbot reacts. An AI Agent plans, decides, acts, and adapts — all on its own. Understanding that difference is worth everything in today's AI landscape.
+
+Related Topics :-
+
+Agentic AI, AI agents explained, how AI agents work, what is an AI agent, AI agents 2026, learn AI agents, build AI agents, agentic AI course for beginners, AI agents for beginners, master AI agents, complete agentic AI course, AI Fundamentals, LLMs explained, AI agent loops, AI memory systems, AI tools, RAG explained, vector databases explained, Embeddings explained, MCP explained, AI architecture patterns, agentic architecture, AI frameworks and advanced patterns, multi-agent systems, AI safety, AI guardrails, tejas ai, tejas_aiz, ai 2026, 2026 etc.
+
+- Tejas AI","[""Education""]","[""Agentic AI"", ""AI agents explained"", ""how AI agents work"", ""what is an AI agent"", ""AI agents 2026"", ""learn AI agents"", ""build AI agents"", ""agentic AI course for beginners"", ""AI agents for beginners"", ""master AI agents"", ""complete agentic AI course"", ""AI Fundamentals"", ""LLMs explained"", ""AI memory systems"", ""AI tools"", ""RAG explained"", ""vector databases explained"", ""Embeddings explained"", ""MCP explained"", ""AI architecture patterns"", ""agentic architecture"", ""multi-agent systems"", ""AI guardrails"", ""tejas ai"", ""2026""]",,ok,en,936
+YmLp8qe87A0,I Built an LLM From Scratch,Syntax,Syntax,UCyU5wkjgQYGRB0hIHMwm2Sg,20260710,3108,51:48,181657,8764,356,0,public,not_live,en,https://www.youtube.com/watch?v=YmLp8qe87A0,"In this video CJ explains chat bots, neural networks, tokenization, embeddings, transformers and more. He shows real working code for everything and gives historical context along the way. View the code here: https://github.com/w3cj/how-llms-work
+
+00:00 - intro
+01:54 - history of chatbots
+04:21 - chat bot code
+06:49 - black box thinking
+07:41 - what are neural networks?
+08:33 - history of neural networks
+10:27 - XOR neural network code
+15:35 - what is tokenization?
+16:32 - history of tokenization
+17:55 - tokenizer code
+21:37 - what are embeddings?
+22:04 - history of embeddings
+23:33 - what is a vector?
+24:39 - embedding code
+30:48 - history of transformers
+32:33 - what is a transformer?
+33:11 - what is self attention?
+34:25 - what is a feed forward network?
+34:37 - what are stacked transformer blocks?
+41:37 - what are softmax, temperature and top-p?
+42:54 - the autoregressive loop
+43:28 - the context window
+44:45 - the full picture
+45:26 - what is fine-tuning
+46:39 - RLHF
+47:24 - tool calling
+48:36 - the AI summit
+49:51 - final thoughts
+
+Claude Shannon | https://en.wikipedia.org/wiki/Claude_Shannon
+Betty Shannon | https://en.wikipedia.org/wiki/Betty_Shannon
+Prediction and Entropy of Printed English (1951) | https://www.princeton.edu/~wbialek/rome/refs/shannon_51.pdf
+
+Alan Turing | https://en.wikipedia.org/wiki/Alan_Turing
+Turing Test | https://en.wikipedia.org/wiki/Computing_Machinery_and_Intelligence
+Joseph Weizenbaum | https://en.wikipedia.org/wiki/Joseph_Weizenbaum
+ELIZA | https://en.wikipedia.org/wiki/ELIZA
+ELIZA - Weizenbaum (1966) | https://dl.acm.org/doi/10.1145/365153.365168
+ELIZA Archaeology Project | https://sites.google.com/view/elizaarchaeology/blog/3-weizenbaums-secretary
+Computer Power and Human Reason | https://archive.org/details/computerpowerhum0000weiz_v0i3
+Kenneth Colby | https://en.wikipedia.org/wiki/Kenneth_Colby
+PARRY | https://en.wikipedia.org/wiki/PARRY
+Artificial Paranoia (1971) (PDF) | https://courses.cs.umbc.edu/graduate/671/fall20/resources/colby_71.pdf
+ELIZA connected to PARRY - RFC 439 | https://datatracker.ietf.org/doc/html/rfc439
+ALICE | https://en.wikipedia.org/wiki/Artificial_Linguistic_Internet_Computer_Entity
+SmarterChild | https://en.wikipedia.org/wiki/SmarterChild
+
+McCulloch & Pitts (1943) | https://en.wikipedia.org/wiki/A_Logical_Calculus_of_the_Ideas_Immanent_in_Nervous_Activity
+Frank Rosenblatt | https://en.wikipedia.org/wiki/Frank_Rosenblatt
+Perceptron | https://en.wikipedia.org/wiki/Perceptron
+Rosenblatt's Perceptron - Cornell | https://news.cornell.edu/stories/2019/09/professors-perceptron-paved-way-ai-60-years-too-soon
+New Navy Device Learns by Doing - NYT (1958) | https://timesmachine.nytimes.com/timesmachine/1958/07/08/issue.html
+Perceptrons | https://en.wikipedia.org/wiki/Perceptrons_(book)
+
+Backpropagation - Rumelhart, Hinton & Williams (1986) | https://www.nature.com/articles/323533a0
+
+BPE - Philip Gage (1994) (PDF) | https://www.derczynski.com/papers/archive/BPE_Gage.pdf
+Byte Pair Encoding | https://en.wikipedia.org/wiki/Byte-pair_encoding
+BPE for NMT - Sennrich, Haddow & Birch (2015) | https://arxiv.org/abs/1508.07909
+
+Gottlob Frege | https://en.wikipedia.org/wiki/Gottlob_Frege
+Foundations of Arithmetic - Frege (1884) | https://archive.org/details/foundationsofari00fregrich
+Context Principle | https://en.wikipedia.org/wiki/Context_principle
+J.R. Firth | https://en.wikipedia.org/wiki/John_Rupert_Firth
+Studies in Linguistic Analysis - Firth (1957) | https://archive.org/details/studiesinlinguis0000vari
+Word2Vec - Mikolov et al. (2013) | https://arxiv.org/abs/1301.3781
+Word2Vec Negative Sampling - Mikolov et al. (2013) | https://arxiv.org/abs/1310.4546
+
+Attention Mechanism - Bahdanau, Cho & Bengio (2014) | https://arxiv.org/abs/1409.0473
+GNMT - Wu et al. (2016) | https://arxiv.org/abs/1609.08144
+Xavier Initialization - Glorot & Bengio (2010) | https://proceedings.mlr.press/v9/glorot10a.html
+Attention Is All You Need - Vaswani et al. (2017) | https://arxiv.org/abs/1706.03762
+Transformer | https://en.wikipedia.org/wiki/Transformer_(deep_learning)
+
+Common Crawl | https://en.wikipedia.org/wiki/Common_Crawl
+RLHF | https://en.wikipedia.org/wiki/Reinforcement_learning_from_human_feedback
+
+Dartmouth Workshop (1956) | https://en.wikipedia.org/wiki/Dartmouth_workshop
+Dartmouth AI Proposal (1955) | https://www-formal.stanford.edu/jmc/history/dartmouth/dartmouth.html
+
+Mamba - Gu & Dao (2023) | https://arxiv.org/abs/2312.00752
+xLSTM - Beck et al. (2024) | https://arxiv.org/abs/2405.04517
+Jamba - Lieber et al. (2024) | https://arxiv.org/abs/2403.19887
+JEPA - Yann LeCun (2022) | https://openreview.net/pdf?id=BZ5a1r-kVsf
+
+----------------------------------------------------------------------------
+
+http://www.syntax.fm
+
+Brought to you by https://sentry.io/syntax
+
+#LLM #explained #machinelearning #webdevelopment #webdeveloper #javascript #typescript #syntax #syntaxfm","[""Science & Technology""]","[""tutorials"", ""cms"", ""html"", ""css"", ""html5"", ""css3"", ""education"", ""free"", ""lessons"", ""tuts"", ""tutorial"", ""learn"", ""software"", ""web development"", ""web developer"", ""developer"", ""web"", ""website"", ""javascript"", ""typescript"", ""programming"", ""coding""]","[{""start_time"": 0, ""title"": ""intro"", ""end_time"": 114}, {""start_time"": 114, ""title"": ""history of chatbots"", ""end_time"": 261}, {""start_time"": 261, ""title"": ""chat bot code"", ""end_time"": 409}, {""start_time"": 409, ""title"": ""black box thinking"", ""end_time"": 461}, {""start_time"": 461, ""title"": ""what are neural networks?"", ""end_time"": 513}, {""start_time"": 513, ""title"": ""history of neural networks"", ""end_time"": 627}, {""start_time"": 627, ""title"": ""XOR neural network code"", ""end_time"": 935}, {""start_time"": 935, ""title"": ""what is tokenization?"", ""end_time"": 992}, {""start_time"": 992, ""title"": ""history of tokenization"", ""end_time"": 1075}, {""start_time"": 1075, ""title"": ""tokenizer code"", ""end_time"": 1297}, {""start_time"": 1297, ""title"": ""what are embeddings?"", ""end_time"": 1324}, {""start_time"": 1324, ""title"": ""history of embeddings"", ""end_time"": 1413}, {""start_time"": 1413, ""title"": ""what is a vector?"", ""end_time"": 1479}, {""start_time"": 1479, ""title"": ""embedding code"", ""end_time"": 1848}, {""start_time"": 1848, ""title"": ""history of transformers"", ""end_time"": 1953}, {""start_time"": 1953, ""title"": ""what is a transformer?"", ""end_time"": 1991}, {""start_time"": 1991, ""title"": ""what is self attention?"", ""end_time"": 2065}, {""start_time"": 2065, ""title"": ""what is a feed forward network?"", ""end_time"": 2077}, {""start_time"": 2077, ""title"": ""what are stacked transformer blocks?"", ""end_time"": 2497}, {""start_time"": 2497, ""title"": ""what are softmax, temperature and top-p?"", ""end_time"": 2574}, {""start_time"": 2574, ""title"": ""the autoregressive loop"", ""end_time"": 2608}, {""start_time"": 2608, ""title"": ""the context window"", ""end_time"": 2685}, {""start_time"": 2685, ""title"": ""the full picture"", ""end_time"": 2726}, {""start_time"": 2726, ""title"": ""what is fine-tuning"", ""end_time"": 2799}, {""start_time"": 2799, ""title"": ""RLHF"", ""end_time"": 2844}, {""start_time"": 2844, ""title"": ""tool calling"", ""end_time"": 2916}, {""start_time"": 2916, ""title"": ""the AI summit"", ""end_time"": 2991}, {""start_time"": 2991, ""title"": ""final thoughts"", ""end_time"": 3108}]",ok,en,1577
 AYQtRqW1xX4,How to Build & Sell AI Agents in 2026: Ultimate Beginner’s Guide,Liam Ottley,Liam Ottley,UCui4jxDaMb53Gdh-AZUTPAg,20260322,11103,3:05:03,220233,5879,188,0,public,not_live,en,https://www.youtube.com/watch?v=AYQtRqW1xX4,"☁️ Self-Host your n8n with Hostinger → https://hostinger.com/liamn8n
 Use code LIAMOTTLEY for extra 10% off 
 📚 Grab all the course resources in the #1 community for AI entrepreneurs: https://bit.ly/skool-agents-course
@@ -2233,13 +2420,6 @@ To sponsor a future episode, visit https://dwarkesh.com/advertise
 01:18:13 – “We are squarely an age of research company”
 01:29:23 -- Self-play and multi-agent
 01:32:42 – Research taste","[""Science & Technology""]",[],"[{""start_time"": 0, ""title"": ""Explaining model jaggedness"", ""end_time"": 579}, {""start_time"": 579, ""title"": ""Emotions and value functions"", ""end_time"": 1129}, {""start_time"": 1129, ""title"": ""What are we scaling?"", ""end_time"": 1513}, {""start_time"": 1513, ""title"": ""Why humans generalize better than models"", ""end_time"": 2145}, {""start_time"": 2145, ""title"": ""Straight-shotting superintelligence"", ""end_time"": 2807}, {""start_time"": 2807, ""title"": ""SSI’s model will learn from deployment"", ""end_time"": 3307}, {""start_time"": 3307, ""title"": ""Alignment"", ""end_time"": 4693}, {""start_time"": 4693, ""title"": ""“We are squarely an age of research company”"", ""end_time"": 5363}, {""start_time"": 5363, ""title"": ""Self-play and multi-agent"", ""end_time"": 5562}, {""start_time"": 5562, ""title"": ""Research taste"", ""end_time"": 5763}]",ok,en,903
-L7FF8Zgab3M,"What is OpenClaw? Inside AI Agents, LLMs and the Agentic Loop",IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260427,694,11:34,239829,4712,161,0,public,not_live,en,https://www.youtube.com/watch?v=L7FF8Zgab3M,"Learn more about AI Agents here → https://ibm.biz/Bdpmx6
-
-We've all been using AI chatbots, but AI agents can now move from knowing to doing. Cedric Clyburn breaks down how AI agents, LLMs, tools, and the agentic loop enable real autonomous workflows. Learn how automation, security, and modern AI systems are shaping the future of tech. 🚀
-
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdpmxU
-
-#aiagents #llm #openclaw","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,115
 w0H1-b044KY,How to Build & Sell AI Agents: Ultimate Beginner’s Guide,Liam Ottley,Liam Ottley,UCui4jxDaMb53Gdh-AZUTPAg,20250327,13839,3:50:39,3580249,83950,2800,0,public,not_live,en,https://www.youtube.com/watch?v=w0H1-b044KY,"📚 Get access to the AI Agents Full Guide & all my AI resources on Skool: https://bit.ly/skool-ov
 📈 Become a Wildly Profitable AI Entrepreneur: https://bit.ly/aaa-accelerator-ov
 🤝 Ready to transform your business with AI? Let's talk: https://bit.ly/morningside-ai-ov
@@ -2483,15 +2663,6 @@ https://twitter.com/joshuastarmer
 16:38 Some more Neural Network terminology
 
 #StatQuest #NeuralNetworks #DubbedWithAloud","[""Education""]","[""Josh Starmer"", ""StatQuest"", ""Machine Learning"", ""Statistics"", ""Data Science"", ""Neural Networks"", ""Deep Learning""]","[{""start_time"": 0, ""title"": ""Awesome song and introduction"", ""end_time"": 121}, {""start_time"": 121, ""title"": ""A simple dataset and problem"", ""end_time"": 217}, {""start_time"": 217, ""title"": ""Description of Neural Networks"", ""end_time"": 474}, {""start_time"": 474, ""title"": ""Creating a squiggle from curved lines"", ""end_time"": 925}, {""start_time"": 925, ""title"": ""Using the Neural Network to make a prediction"", ""end_time"": 998}, {""start_time"": 998, ""title"": ""Some more Neural Network terminology"", ""end_time"": 1134}]",ok,en,169
-zYGDpG-pTho,RAG vs Fine-Tuning vs Prompt Engineering: Optimizing AI Models,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250414,790,13:10,691418,12388,216,0,public,not_live,,https://www.youtube.com/watch?v=zYGDpG-pTho,"Ready to become a certified watsonx AI Assistant Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdndTs
-
-Learn more about RAG vs. Fine-Tuning vs. Prompt Engineering here → https://ibm.biz/BdndTi
-
-How do AI chatbots deliver better responses? 🤔 Martin Keen explains RAG 🛠️, fine-tuning 🎯, and prompt engineering ✏️—methods that extend knowledge, refine responses, and build domain expertise. Learn how these strategies optimize large language models and improve AI outputs today! 🚀
-
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdndTj
-
-#retrievalaugmentedgeneration #finetuning #promptengineering","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,146
 kCc8FmEb1nY,"Let's build GPT: from scratch, in code, spelled out.",Andrej Karpathy,Andrej Karpathy,UCXUPKJO5MZQN11PqgIvyuvQ,20230117,6980,1:56:20,7541280,164553,3200,0,public,not_live,en,https://www.youtube.com/watch?v=kCc8FmEb1nY,"We build a Generatively Pretrained Transformer (GPT), following the paper ""Attention is All You Need"" and OpenAI's GPT-2 / GPT-3. We talk about connections to ChatGPT, which has taken the world by storm. We watch GitHub Copilot, itself a GPT, help us write a GPT (meta :D!) . I recommend people watch the earlier makemore videos to get comfortable with the autoregressive language modeling framework and basics of tensors and PyTorch nn, which we take for granted in this video.
 
 Links:

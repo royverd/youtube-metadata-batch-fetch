@@ -250,22 +250,29 @@ class TimeoutSession(requests.Session):
 
 class ApiPool:
     """One or more YouTubeTranscriptApi instances to draw transcript requests
-    from. Default and Webshare modes are pools of exactly one - Webshare's own
-    gateway already rotates IPs internally when it hits a 429, so there's
-    nothing left for us to do there. A generic proxy pool is the one case
-    where rotation is our job: each GenericProxyConfig is just one fixed
-    proxy with no rotation of its own, so transcript_pass rotates through the
-    pool itself whenever the current entry fails.
+    from. Every mode with a fallback available puts the origin IP first (it's
+    free and often still working) and proxies after it as the backstop -
+    Webshare's own gateway already rotates IPs internally on a 429, so
+    there's nothing left for us to do once we're in it; a generic proxy pool
+    is the one case where rotation between entries is our own job.
 
-    keys carries the raw proxy URL behind each entry (None for the single-IP
-    modes, which have nothing to persist) so a failure can be recorded back
-    into free_proxies.json after the run - and so rotate() can skip anything
-    already proven bad this run instead of possibly cycling back to it."""
+    is_direct marks which single entry (if any) is the real origin IP, so
+    transcript_pass can keep protecting *that* one's reputation (spaced,
+    tolerant of a few transient errors) while treating every actual proxy as
+    disposable (no delay, zero tolerance) - a distinction that pool size
+    alone can't make once the origin IP is just one entry among several.
 
-    def __init__(self, apis, labels, keys=None):
+    keys carries the raw proxy URL behind each entry (None for the origin IP
+    and for Webshare, which have nothing to persist) so a failure can be
+    recorded back into free_proxies.json after the run - and so rotate() can
+    skip anything already proven bad this run instead of possibly cycling
+    back to it."""
+
+    def __init__(self, apis, labels, keys=None, is_direct=None):
         self.apis = apis
         self.labels = labels
         self.keys = keys or [None] * len(apis)
+        self.is_direct = is_direct or [False] * len(apis)
         self.idx = 0
         self.failed_keys = set()
         self.ok_keys = set()
@@ -282,6 +289,10 @@ class ApiPool:
     @property
     def key(self):
         return self.keys[self.idx]
+
+    @property
+    def on_direct(self):
+        return self.is_direct[self.idx]
 
     def rotate(self):
         """Advance to the next proxy that hasn't already failed this run,
@@ -421,12 +432,14 @@ def select_transcript_mode():
     grab_watchlist.py's browser picker: 0 is the safe default, and it
     re-prompts on bad input rather than guessing what you meant."""
     print("How should transcript requests be routed?")
-    print("  0) Default  - this machine's own IP, spaced out per the delay tiers below.")
-    print("  1) Webshare - your Webshare rotating-residential-proxy account")
-    print("                (env vars WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD).")
-    print("  2) Generic  - your own proxies.txt entries plus an auto-refreshed pool of")
-    print("                free public proxies; rotates to the next one immediately")
-    print("                on any failure (most are dead/already blocked - expect that).")
+    print("  0) Generic  - origin IP first, then your proxies.txt entries plus an")
+    print("                auto-refreshed pool of free public proxies, rotating")
+    print("                immediately on any failure once past the origin (default).")
+    print("  1) Webshare - origin IP first, then your Webshare rotating-residential-")
+    print("                proxy account (env vars WEBSHARE_PROXY_USERNAME /")
+    print("                WEBSHARE_PROXY_PASSWORD).")
+    print("  2) Direct   - this machine's own IP only, no proxy fallback, spaced")
+    print("                out per the delay tiers below.")
     while True:
         choice = input("Mode [0]: ").strip()
         if choice == "":
@@ -437,19 +450,28 @@ def select_transcript_mode():
 
 
 def build_pool(mode):
-    """Turns the chosen mode into an ApiPool. Modes 1/2 fall back to the
-    default (no proxy) with an explanatory message if they aren't actually
-    configured yet, rather than silently doing nothing or crashing."""
+    """Turns the chosen mode into an ApiPool. Modes 0/1 put the origin IP
+    first - it's free and often still working - and only fall through to
+    proxies once that fails; mode 2 is the explicit opt-out, origin IP only,
+    ever. Modes 0/1 fall back to origin-only with an explanatory message if
+    their proxy source isn't actually configured yet, rather than silently
+    doing nothing or crashing."""
+    direct_api, direct_label = YouTubeTranscriptApi(), "default (no proxy)"
+
     if mode == "1":
         user = os.environ.get("WEBSHARE_PROXY_USERNAME")
         pw = os.environ.get("WEBSHARE_PROXY_PASSWORD")
         if user and pw:
             cfg = WebshareProxyConfig(proxy_username=user, proxy_password=pw)
-            return ApiPool([YouTubeTranscriptApi(proxy_config=cfg)], ["Webshare"])
+            webshare_api = YouTubeTranscriptApi(proxy_config=cfg)
+            return ApiPool([direct_api, webshare_api], [direct_label, "Webshare"],
+                            keys=[None, None], is_direct=[True, False])
         print("  WEBSHARE_PROXY_USERNAME / WEBSHARE_PROXY_PASSWORD aren't set.")
         print("  Get them from https://dashboard.webshare.io/proxy/settings, set both,")
         print("  and re-run. Falling back to the default (no proxy) for this run.")
     elif mode == "2":
+        return ApiPool([direct_api], [direct_label], is_direct=[True])
+    else:  # mode "0", the default
         manual_urls = read_proxies(PROXIES_FILE)
         pool_data = refresh_free_proxy_pool(FREE_PROXIES_FILE)
         free_proxies = pool_data.get("proxies", {})
@@ -463,18 +485,19 @@ def build_pool(mode):
         untested = [u for u, info in free_proxies.items() if info.get("status") == "untested"]
         urls = list(dict.fromkeys(manual_urls + ok + untested))
         if urls:
-            apis = [YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=u, https_url=u),
-                                          http_client=TimeoutSession(FREE_PROXY_TIMEOUT))
-                    for u in urls]
-            labels = [f"proxy {i + 1}/{len(urls)}" for i in range(len(urls))]
+            proxy_apis = [YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=u, https_url=u),
+                                                http_client=TimeoutSession(FREE_PROXY_TIMEOUT))
+                          for u in urls]
+            proxy_labels = [f"proxy {i + 1}/{len(urls)}" for i in range(len(urls))]
             print(f"  Pool: {len(manual_urls)} manual + {len(ok)} known-good + {len(untested)} "
                   f"untested free proxies ({len(free_proxies) - len(ok) - len(untested)} known-bad skipped).")
-            p = ApiPool(apis, labels, keys=urls)
+            p = ApiPool([direct_api] + proxy_apis, [direct_label] + proxy_labels,
+                        keys=[None] + urls, is_direct=[True] + [False] * len(urls))
             p.pool_data, p.pool_data_path = pool_data, FREE_PROXIES_FILE  # so main() can persist results after
             return p
         print("  No usable proxies - proxies.txt is empty and the free-proxy pool came up empty too.")
         print("  Falling back to the default (no proxy) for this run.")
-    return ApiPool([YouTubeTranscriptApi()], ["default (no proxy)"])
+    return ApiPool([direct_api], [direct_label], is_direct=[True])
 
 
 def load_existing(path):
@@ -566,14 +589,17 @@ def transcript_pass(records, pool):
     Reuses 'ok' transcripts and skips permanently disabled/absent ones, so a
     resume run only works on what's actually outstanding.
 
-    Single-IP pools (modes 0/1) keep the original spaced-out, tolerant-of-a-
-    few-transient-errors behavior - there's exactly one IP whose reputation is
-    worth protecting, and delay is what protects it. Multi-proxy pools (mode
-    2) drop both: with dozens to hundreds of disposable, mostly-already-dead
-    candidates, pacing doesn't protect anything we intend to reuse, and
-    tolerating a few errors before reacting just means burning through several
-    real videos on a proxy that was simply never going to answer. So there,
-    any failure (blocked or a plain error) rotates immediately.
+    The origin IP (whenever it's the current entry - pool.on_direct) keeps the
+    original spaced-out, tolerant-of-a-few-transient-errors behavior: it's the
+    one resource whose reputation is worth protecting, and that protection
+    has to apply no matter how many proxies are queued up behind it. Any
+    actual proxy entry gets neither: with dozens to hundreds of disposable,
+    mostly-already-dead candidates, pacing doesn't protect anything we intend
+    to reuse, and tolerating a few errors before reacting just means burning
+    through several real videos on a proxy that was simply never going to
+    answer. So there, any failure (blocked or a plain error) rotates
+    immediately - this is evaluated fresh every iteration since rotation
+    changes which kind of entry is current.
 
     On a failure, tries pool.rotate() first - if there's another proxy to fall
     back to, the same video is retried on it rather than being marked done.
@@ -587,11 +613,13 @@ def transcript_pass(records, pool):
         print("Transcripts: nothing outstanding.")
         return
 
-    rotating_pool = len(pool.apis) > 1
     base = request_delay_base(len(todo))
-    if rotating_pool:
-        print(f"Transcripts: {len(todo)} to fetch via {pool.label} (pool of {len(pool.apis)}) - "
-              f"no artificial delay, rotates immediately on any failure. Ctrl-C is safe - progress is saved.")
+    if len(pool.apis) > 1:
+        est_min = round(len(todo) * base / 60)
+        print(f"Transcripts: {len(todo)} to fetch via {pool.label} - starts on the origin IP "
+              f"(~{base:.0f}s apart, tolerant of a few errors, est ~{est_min} min if it holds), falls "
+              f"through to {len(pool.apis) - 1} more if needed (no delay there, rotates on any failure). "
+              f"Ctrl-C is safe - progress is saved.")
     else:
         est_min = round(len(todo) * base / 60)
         print(f"Transcripts: {len(todo)} to fetch, ~{base:.0f}s apart (est ~{est_min} min) via "
@@ -604,6 +632,7 @@ def transcript_pass(records, pool):
     try:
         while i < len(todo):
             rec = todo[i]
+            on_direct = pool.on_direct  # evaluated fresh - rotation may have changed this since last iteration
             t0 = time.time()
             text, segs, status, lang = fetch_transcript(pool.current, rec["id"])
             elapsed = time.time() - t0
@@ -617,12 +646,12 @@ def transcript_pass(records, pool):
 
             block_signal = status == "blocked"
             if status == "error":
-                if rotating_pool:
-                    block_signal = True  # no tolerance - a disposable proxy that errors once is done
-                else:
+                if on_direct:
                     consecutive_errors += 1
                     if consecutive_errors >= CONSECUTIVE_ERROR_LIMIT:
                         block_signal = True
+                else:
+                    block_signal = True  # no tolerance - a disposable proxy that errors once is done
             else:
                 consecutive_errors = 0
                 if status == "ok" and pool.key:
@@ -633,21 +662,21 @@ def transcript_pass(records, pool):
                 old_label = pool.label
                 if status == "blocked":
                     reason = "blocked"
-                elif rotating_pool:
-                    reason = "error"  # no tolerance here, so this is always the first and only one
-                else:
+                elif on_direct:
                     reason = f"{consecutive_errors} errors in a row"
+                else:
+                    reason = "error"  # no tolerance here, so this is always the first and only one
                 if pool.rotate():
                     consecutive_errors = 0
                     print(f"\n  {reason} on {old_label} - rotating to {pool.label}")
                     continue  # retry this same video on the newly-rotated proxy
                 stopped = ("YouTube is blocking this IP (RequestBlocked/IpBlocked)." if status == "blocked"
-                           else f"{consecutive_errors} errors in a row - the IP looks blocked." if not rotating_pool
+                           else f"{consecutive_errors} errors in a row - the IP looks blocked." if on_direct
                            else "every proxy in the pool has now failed - none left to rotate to.")
                 break
 
             i += 1
-            if i < len(todo) and not rotating_pool:
+            if i < len(todo) and on_direct:
                 time.sleep(random.uniform(base * (1 - DELAY_JITTER), base * (1 + DELAY_JITTER)))
     except KeyboardInterrupt:
         stopped = "interrupted (Ctrl-C)."
