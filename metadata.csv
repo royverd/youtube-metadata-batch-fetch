@@ -1,84 +1,127 @@
 id,title,channel,uploader,channel_id,upload_date,duration,duration_string,view_count,like_count,comment_count,age_limit,availability,live_status,language,webpage_url,description,categories,tags,chapters,transcript_status,transcript_language,transcript_segments
-g9JIUM0MHgQ,CLI vs MCP: How AI Agents Choose the Right Tool for the Job,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260504,846,14:06,113935,2879,147,0,public,not_live,en,https://www.youtube.com/watch?v=g9JIUM0MHgQ,"Learn more about MCP here → https://ibm.biz/~92j1qki7Y
+7xTGNNLPyMI,Deep Dive into LLMs like ChatGPT,Andrej Karpathy,Andrej Karpathy,UCXUPKJO5MZQN11PqgIvyuvQ,20250205,12683,3:31:23,8320701,128946,4000,0,public,not_live,en,https://www.youtube.com/watch?v=7xTGNNLPyMI,"This is a general audience deep dive into the Large Language Model (LLM) AI technology that powers ChatGPT and related products. It is covers the full training stack of how the models are developed, along with mental models of how to think about their ""psychology"", and how to get the best use them in practical applications. I have one ""Intro to LLMs"" video already from ~year ago, but that is just a re-recording of a random talk, so I wanted to loop around and do a lot more comprehensive version.
 
-Both CLI and MCP are ways for AI agents to interact with the world. Martin Keen explains how agents use CLI commands or MCP tools for tasks across real developer workflows. Learn how context windows, schemas, and practical examples shape smarter AI development. 🚀
+Instructor
+Andrej was a founding member at OpenAI (2015) and then Sr. Director of AI at Tesla (2017-2022), and is now a founder at Eureka Labs, which is building an AI-native school. His goal in this video is to raise knowledge and understanding of the state of the art in AI, and empower people to effectively use the latest and greatest in their work.
+Find more at https://karpathy.ai/ and https://x.com/karpathy
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~o4HUHwcNB
+Chapters
+00:00:00 introduction
+00:01:00 pretraining data (internet)
+00:07:47 tokenization
+00:14:27 neural network I/O
+00:20:11 neural network internals
+00:26:01 inference
+00:31:09 GPT-2: training and inference
+00:42:52 Llama 3.1 base model inference
+00:59:23 pretraining to post-training
+01:01:06 post-training data (conversations)
+01:20:32 hallucinations, tool use, knowledge/working memory
+01:41:46 knowledge of self
+01:46:56 models need tokens to think
+02:01:11 tokenization revisited: models struggle with spelling
+02:04:53 jagged intelligence
+02:07:28 supervised finetuning to reinforcement learning
+02:14:42 reinforcement learning
+02:27:47 DeepSeek-R1
+02:42:07 AlphaGo
+02:48:26 reinforcement learning from human feedback (RLHF)
+03:09:39 preview of things to come
+03:15:15 keeping track of LLMs
+03:18:34 where to find LLMs
+03:21:46 grand summary
 
-#aiagents #mcp #aidevelopment","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,130
-ZVPlLaehjLk,"Agentic AI Frameworks Explained: Workflows, Multi-Agent, & Production",IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260709,713,11:53,33203,1160,47,0,public,not_live,en,https://www.youtube.com/watch?v=ZVPlLaehjLk,"Learn more about AI Agent Frameworks here → https://ibm.biz/~M1qnwGHnE
+Links
+- ChatGPT https://chatgpt.com/
+- FineWeb (pretraining dataset): https://huggingface.co/spaces/HuggingFaceFW/blogpost-fineweb-v1
+- Tiktokenizer: https://tiktokenizer.vercel.app/
+- Transformer Neural Net 3D visualizer: https://bbycroft.net/llm
+- llm.c Let's Reproduce GPT-2 https://github.com/karpathy/llm.c/discussions/677
+- Llama 3 paper from Meta: https://arxiv.org/abs/2407.21783
+- Hyperbolic, for inference of base model: https://app.hyperbolic.xyz/
+- InstructGPT paper on SFT: https://arxiv.org/abs/2203.02155
+- HuggingFace inference playground: https://huggingface.co/spaces/huggingface/inference-playground
+- DeepSeek-R1 paper: https://arxiv.org/abs/2501.12948
+- TogetherAI Playground for open model inference: https://api.together.xyz/playground
+- AlphaGo paper (PDF): https://discovery.ucl.ac.uk/id/eprint/10045895/1/agz_unformatted_nature.pdf
+- AlphaGo Move 37 video: https://www.youtube.com/watch?v=HT-UZkiOLv8
+- LM Arena for model rankings: https://lmarena.ai/
+- AI News Newsletter: https://buttondown.com/ainews
+- LMStudio for local inference https://lmstudio.ai/
 
-Too many agentic AI frameworks and no clear starting point. 🤯 Meenakshi Kodati breaks down agentic AI frameworks like LangChain, AutoGen, and CrewAI across workflows, multi-agent systems, and production use cases. Learn how to choose the right framework based on your system design and real-world needs.
+- The visualization UI I was using in the video: https://excalidraw.com/
+- The specific file of Excalidraw we built up: https://drive.google.com/file/d/1EZh5hNDzxMMy05uLhVryk061QYQGTxiN/view?usp=sharing
+- Discord channel for Eureka Labs and this video: https://discord.gg/3zy8kqD9Cp
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~YOhBiYsX4
+Educational Use Licensing
+This video is freely available for educational and internal training purposes. Educators, students, schools, universities, nonprofit institutions, businesses, and individual learners may use this content freely for lessons, courses, internal training, and learning activities, provided they do not engage in commercial resale, redistribution, external commercial use, or modify content to misrepresent its intent.","[""Science & Technology""]","[""llm"", ""chatgpt"", ""ai"", ""deep dive"", ""deep learning"", ""introduction"", ""large language model""]","[{""start_time"": 0, ""title"": ""introduction"", ""end_time"": 60}, {""start_time"": 60, ""title"": ""pretraining data (internet)"", ""end_time"": 467}, {""start_time"": 467, ""title"": ""tokenization"", ""end_time"": 867}, {""start_time"": 867, ""title"": ""neural network I/O"", ""end_time"": 1211}, {""start_time"": 1211, ""title"": ""neural network internals"", ""end_time"": 1561}, {""start_time"": 1561, ""title"": ""inference"", ""end_time"": 1869}, {""start_time"": 1869, ""title"": ""GPT-2: training and inference"", ""end_time"": 2572}, {""start_time"": 2572, ""title"": ""Llama 3.1 base model inference"", ""end_time"": 3563}, {""start_time"": 3563, ""title"": ""pretraining to post-training"", ""end_time"": 3666}, {""start_time"": 3666, ""title"": ""post-training data (conversations)"", ""end_time"": 4832}, {""start_time"": 4832, ""title"": ""hallucinations, tool use, knowledge/working memory"", ""end_time"": 6106}, {""start_time"": 6106, ""title"": ""knowledge of self"", ""end_time"": 6416}, {""start_time"": 6416, ""title"": ""models need tokens to think"", ""end_time"": 7271}, {""start_time"": 7271, ""title"": ""tokenization revisited: models struggle with spelling"", ""end_time"": 7493}, {""start_time"": 7493, ""title"": ""jagged intelligence"", ""end_time"": 7648}, {""start_time"": 7648, ""title"": ""supervised finetuning to reinforcement learning"", ""end_time"": 8082}, {""start_time"": 8082, ""title"": ""reinforcement learning"", ""end_time"": 8867}, {""start_time"": 8867, ""title"": ""DeepSeek-R1"", ""end_time"": 9727}, {""start_time"": 9727, ""title"": ""AlphaGo"", ""end_time"": 10106}, {""start_time"": 10106, ""title"": ""reinforcement learning from human feedback (RLHF)"", ""end_time"": 11379}, {""start_time"": 11379, ""title"": ""preview of things to come"", ""end_time"": 11715}, {""start_time"": 11715, ""title"": ""keeping track of LLMs"", ""end_time"": 11914}, {""start_time"": 11914, ""title"": ""where to find LLMs"", ""end_time"": 12106}, {""start_time"": 12106, ""title"": ""grand summary"", ""end_time"": 12683}]",ok,en,5761
+X8jsijhllIA,But what are Hamming codes? The origin of error correction,3Blue1Brown,3Blue1Brown,UCYO_jab_esuFRV4b17AJtAw,20200904,1205,20:05,2985357,102064,2200,0,public,not_live,en,https://www.youtube.com/watch?v=X8jsijhllIA,"A discovery-oriented introduction to error correction codes.
+Part 2: https://youtu.be/b3NxrZOu_CE
+Ben Eater:'s take: https://youtu.be/h0jloehRKas
+Help fund future projects: https://www.patreon.com/3blue1brown
+An equally valuable form of support is to simply share some of the videos.
+Special thanks to these supporters: https://3b1b.co/hamming-thanks
 
-#agenticai #aiagents #langchain #aiframeworks","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,153
-Lg-meK5IU8Q,What AI Agent Skills Are and How They Work,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260420,745,12:25,340234,8631,228,0,public,not_live,en,https://www.youtube.com/watch?v=Lg-meK5IU8Q,"Ready to become a certified watsonx Generative AI Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdpPUq
+Heavily related is the chessboard puzzle I did with Matt Parker:
+https://youtu.be/as7Gkm7Y7h4
 
-Learn more about AI Agents here → https://ibm.biz/BdpPUP
+You can read Hamming's own perspective on his discovery of these codes in chapter 12 of ""The Art of Doing Science and Engineering"".
+https://amzn.to/3lwcnmh
 
-We're all using AI agents, but they still lack the procedural knowledge real work needs. Martin Keen explains how agent skills, LLMs, RAG, and MCP help agents follow workflows, automate tasks, and make smarter decisions. Learn how to build better AI agents. 🤖
+The viewer Harry Li made an interactive on this topic:
+https://harryli0088.github.io/hamming-code/
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdpPUy
+Thanks to these viewers for their contributions to translations
+Hebrew: Omer Tuchfeld
+Hungarian: Fabó Bence
+Spanish: agustin-j
 
- #aiagents #agentskills #llm #mcp","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,150
-k5jYwyhDMxA,5 AI Agent Terms You Need to Know,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260623,667,11:07,66615,2185,56,0,public,not_live,en,https://www.youtube.com/watch?v=k5jYwyhDMxA,"Learn more about AI Agents here → https://ibm.biz/~dXkrYnDwR
+------------------
 
-Frontier AI agents rely on more than just large language models to function effectively. Martin Keen explains five essential concepts in agentic AI, including agents.md, agent skills, MCP, agent‑to‑agent communication, and sub‑agents. These terms define how modern AI agents actually work.
+These animations are largely made using manim, a scrappy open-source python library:  https://github.com/3b1b/manim
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~R5QxgtWK0
+If you want to check it out, I feel compelled to warn you that it's not the most well-documented tool, and it has many other quirks you might expect in a library someone wrote with only their own use in mind.
 
-#aiagents #agenticai #aiarchitecture #mcp","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,136
-phOhGqpXss4,Predictive vs Generative AI: How They Work and When to Use Each,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260511,719,11:59,53070,3017,94,0,public,not_live,en,https://www.youtube.com/watch?v=phOhGqpXss4,"Learn more about Predictive AI vs Generative AI here → https://ibm.biz/BdpPNf
+Music by Vincent Rubinetti.
+Download the music on Bandcamp:
+https://vincerubinetti.bandcamp.com/album/the-music-of-3blue1brown
 
-Predictive AI asks what will happen, while generative AI asks what it could look like. Martin Keen  explains how LLMs, machine learning models, and diffusion systems differ in outputs, data, and real use cases. Learn how to choose the right AI approach.
+Stream the music on Spotify:
+https://open.spotify.com/album/1dVyjwS8FBqXhRunaG5W5u
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdpPNq
+------------------
 
-#generativeai #llm #predictiveai","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,114
-EDb37y_MhRw,Generative vs Agentic AI: Shaping the Future of AI Collaboration,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250421,438,7:18,1274574,16427,520,0,public,not_live,,https://www.youtube.com/watch?v=EDb37y_MhRw,"Ready to become a certified watsonx AI Assistant Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdndTY
+3blue1brown is a channel about animating math, in all senses of the word animate.  And you know the drill with YouTube, if you want to stay posted on new videos, subscribe: http://3b1b.co/subscribe
 
-Want to learn more about Agentic AI + Data? Register here →  https://ibm.biz/BdeGLe
+Various social media links:
+Website: https://www.3blue1brown.com
+Twitter: https://twitter.com/3blue1brown
+Reddit: https://www.reddit.com/r/3blue1brown
+Instagram: https://www.instagram.com/3blue1brown_animations/
+Patreon: https://patreon.com/3blue1brown
+Facebook: https://www.facebook.com/3blue1brown","[""Education""]",[],"[{""start_time"": 0, ""end_time"": 171, ""title"": ""<Untitled Chapter 1>""}, {""start_time"": 171, ""title"": ""Ben Eater implementing Hamming codes"", ""end_time"": 256}, {""start_time"": 256, ""title"": ""Reinventing Hamming Codes"", ""end_time"": 356}, {""start_time"": 356, ""title"": ""Parity Check"", ""end_time"": 408}, {""start_time"": 408, ""title"": ""Noise"", ""end_time"": 504}, {""start_time"": 504, ""title"": ""Fundamental building block"", ""end_time"": 897}, {""start_time"": 897, ""title"": ""(15, 11) Hamming code"", ""end_time"": 963}, {""start_time"": 963, ""title"": ""Extended Hamming Code"", ""end_time"": 1205}]",ok,en,319
+MBGgnz3xVMc,Immersive Education Webinar: Using VR in Nursing at Murdoch University’s New Digital Immersive Lab,3D Organon,3D Organon,UC6BE95PRVcikYCKCqa3tiBw,20251020,3663,1:01:03,570,14,1,0,public,not_live,en,https://www.youtube.com/watch?v=MBGgnz3xVMc,"🎓 Immersive Education Webinar by 3D Organon:
+“A Student’s Heaven” – Using Virtual Reality in Undergraduate Nursing Bioscience at Murdoch University’s New Digital Immersive Lab ft Martin Hill & Barbara Loessl
 
-Learn more about Agentic AI + Data here →  https://ibm.biz/BdeGLe
+In this inspiring session, Martin Hill and Barbara Loessl from Murdoch University, WA, Australia, School of Nursing, showcase how they developed and actively use the university’s cutting-edge Digital Immersive Lab (DigiLab), an innovative space designed to transform learning through fully immersive and interactive experiences.
 
-What’s the difference between generative AI and agentic AI? 🤔 Martin Keen explains how generative AI powers content creation and image generation, while agentic AI uses LLMs and chain of thought reasoning for proactive tasks like personal shopping and conference planning. Discover the future of intelligent AI collaboration! 🚀
+The DigiLab gives students a unique, hands-on approach to mastering nursing bioscience, bringing complex concepts to life through Virtual Reality (VR) and other immersive technologies.
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdndTz
+About the Speakers:
 
-#generativeai #agenticai #ai #llm","[""Education""]","[""IBM"", ""IBM Cloud""]","[{""start_time"": 0, ""title"": ""Intro"", ""end_time"": 15}, {""start_time"": 15, ""title"": ""Generative AI"", ""end_time"": 44}, {""start_time"": 44, ""title"": ""Generative AI Examples"", ""end_time"": 65}, {""start_time"": 65, ""title"": ""Generative AI Overview"", ""end_time"": 151}, {""start_time"": 151, ""title"": ""Common Foundation"", ""end_time"": 199}, {""start_time"": 199, ""title"": ""Real World Applications"", ""end_time"": 325}, {""start_time"": 325, ""title"": ""Chain of Thought Reasoning"", ""end_time"": 438}]",ok,en,81
-B_RrXwDupIg,CAG vs Long Context: How AI Models Use and Remember Information,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260521,658,10:58,30093,972,42,0,public,not_live,en,https://www.youtube.com/watch?v=B_RrXwDupIg,"Learn more about AI Models here → https://ibm.biz/~Yk0OZilIN
+Martin Hill
+A learning technologist specializing in immersive, collaborative, hybrid and active learning technologies. With over 30 years of experience managing campus-wide lecture and clinical capture systems, Martin now leads the VR and Mixed Reality–rich Digital Immersive Lab at Murdoch University.
 
-Long context and CAG are two powerful ways to give AI access to external knowledge. Martin Keen explains how long context, CAG, KV cache, and prompt caching let LLMs process documents faster and more efficiently 🤖. Learn when each method is best for real-world AI workloads.
+Barbara Loessl
+A lecturer in biosciences with over 12 years of university teaching experience, specializing in anatomy, physiology, pharmacology, and pathophysiology. Passionate about experiential learning, Barbara designs interactive activities, from puzzles and role plays to organ dissections, lab experiments, and VR simulations, to engage diverse learning styles and foster peer teaching. Her research focuses on integrating VR simulation in nursing education.
 
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~0Z28hPp8U
+For more insightful sessions on making education more immersive and technologically advanced, stay tuned with 3D Organon!
 
-#ai #llm #aimodel #cag","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,98
--W2JdSl1v48,"Is Fine-Tuning Still Needed? LLMs, RAG, & LoRA",IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20260721,652,10:52,16088,727,60,0,public,not_live,en,https://www.youtube.com/watch?v=-W2JdSl1v48,"Learn more about Fine-Tuning here → https://ibm.biz/~c5OKNxoyO
+📧 Contact us: prosupport@3dorganon.com
+🌐 Follow us: https://linktr.ee/3dorganon
+▶️ Subscribe: https://www.youtube.com/@3dorganon?sub_confirmation=1
 
-Is fine-tuning still needed for modern AI workflows? Martin Keen explains how LLM fine tuning compares to RAG, LoRA, and generative AI techniques. Learn when to customize machine learning models and how to design efficient AI systems.
-
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/~zn4aDcdla
-
-#finetuning #llm #generativeai #machinelearning","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,118
-gl1r1XV0SLw,What is a Vector Database? Powering Semantic Search & AI Applications,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250324,588,9:48,900203,19713,459,0,public,not_live,,https://www.youtube.com/watch?v=gl1r1XV0SLw,"Ready to become a certified Qiskit Developer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdG5uz
-
-Learn more about Vector Databases here → https://ibm.biz/BdG5uq
-
-How can you find images with similar color palettes or landscapes? 🖼️ Martin Keen explains how vector databases use vector embeddings to bridge the semantic gap, enabling advanced semantic search. 🌐 Explore AI innovations like retrieval-augmented generation (RAG) and efficient similarity searches. 🚀
-
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdG5uf
-
-#vectordatabase #semanticsearch #aiapplications #machinelearning","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,109
-zYGDpG-pTho,RAG vs Fine-Tuning vs Prompt Engineering: Optimizing AI Models,IBM Technology,IBM Technology,UCKWaEZ-_VweaEx1j62do_vQ,20250414,790,13:10,691418,12388,216,0,public,not_live,,https://www.youtube.com/watch?v=zYGDpG-pTho,"Ready to become a certified watsonx AI Assistant Engineer? Register now and use code IBMTechYT20 for 20% off of your exam → https://ibm.biz/BdndTs
-
-Learn more about RAG vs. Fine-Tuning vs. Prompt Engineering here → https://ibm.biz/BdndTi
-
-How do AI chatbots deliver better responses? 🤔 Martin Keen explains RAG 🛠️, fine-tuning 🎯, and prompt engineering ✏️—methods that extend knowledge, refine responses, and build domain expertise. Learn how these strategies optimize large language models and improve AI outputs today! 🚀
-
-AI news moves fast. Sign up for a monthly newsletter for AI updates from IBM → https://ibm.biz/BdndTj
-
-#retrievalaugmentedgeneration #finetuning #promptengineering","[""Education""]","[""IBM"", ""IBM Cloud""]",,ok,en,146
+#3DOrganon #Webinar #ImmersiveEducationWebinar #ImmersiveLearning #VirtualReality #NursingEducation #MurdochUniversity #VRAnatomy #3DAnatomy #DigitalImmersiveLab #VRinEducation #AIinEducation #AIinMedicine #ExtendedReality #EdTech #Bioscience #FutureOfLearning","[""Science & Technology""]","[""anatomy. virtual reality"", ""augmented reality"", ""mixed reality"", ""skeleton"", ""clinical anatomy"", ""patient education"", ""oculus"", ""oculus rift"", ""experiential learning"", ""education in vr"", ""medical education""]",,ok,en,1441
 Pn95eOlw5qk,"Complete Agentic AI Course - AI Agents, RAG, Embeddings, Architectures, Framework, VectorDB & Memory",Tejas AI,Tejas AI,UCMbdQplFb-X4SyrCG4PLI7A,20260618,2216,36:56,139181,5273,131,0,public,not_live,en,https://www.youtube.com/watch?v=Pn95eOlw5qk,"Complete Agentic AI Course - AI Agents, RAG, Embeddings, Architectures, Framework, VectorDB & Memory #aiagents #agenticai #aiforbeginners #learnai #ai #2026 
 
 Join Our Discord Server :- https://discord.gg/2abyjxr4v6
@@ -2420,39 +2463,6 @@ To sponsor a future episode, visit https://dwarkesh.com/advertise
 01:18:13 – “We are squarely an age of research company”
 01:29:23 -- Self-play and multi-agent
 01:32:42 – Research taste","[""Science & Technology""]",[],"[{""start_time"": 0, ""title"": ""Explaining model jaggedness"", ""end_time"": 579}, {""start_time"": 579, ""title"": ""Emotions and value functions"", ""end_time"": 1129}, {""start_time"": 1129, ""title"": ""What are we scaling?"", ""end_time"": 1513}, {""start_time"": 1513, ""title"": ""Why humans generalize better than models"", ""end_time"": 2145}, {""start_time"": 2145, ""title"": ""Straight-shotting superintelligence"", ""end_time"": 2807}, {""start_time"": 2807, ""title"": ""SSI’s model will learn from deployment"", ""end_time"": 3307}, {""start_time"": 3307, ""title"": ""Alignment"", ""end_time"": 4693}, {""start_time"": 4693, ""title"": ""“We are squarely an age of research company”"", ""end_time"": 5363}, {""start_time"": 5363, ""title"": ""Self-play and multi-agent"", ""end_time"": 5562}, {""start_time"": 5562, ""title"": ""Research taste"", ""end_time"": 5763}]",ok,en,903
-w0H1-b044KY,How to Build & Sell AI Agents: Ultimate Beginner’s Guide,Liam Ottley,Liam Ottley,UCui4jxDaMb53Gdh-AZUTPAg,20250327,13839,3:50:39,3580249,83950,2800,0,public,not_live,en,https://www.youtube.com/watch?v=w0H1-b044KY,"📚 Get access to the AI Agents Full Guide & all my AI resources on Skool: https://bit.ly/skool-ov
-📈 Become a Wildly Profitable AI Entrepreneur: https://bit.ly/aaa-accelerator-ov
-🤝 Ready to transform your business with AI? Let's talk: https://bit.ly/morningside-ai-ov
-📋 Get our FREE 14-day playbook for finding high-impact AI opportunities in any business: https://bit.ly/14-day-playbook-
-
-""I made a brand new AI Agents course for 2026  👉 https://youtu.be/AYQtRqW1xX4?si=IW4EYwtwULGIK-od""
-
-This full course on AI agents is segmented into three chapters: foundational understanding of AI agents, hands-on tutorials for building various AI use cases, and strategies for monetization. You’ll gain insights into the anatomy of AI agents, practical steps for creating them using no-code platforms, and real-world applications to seize the growing opportunities in AI.
-
-Timestamps:
-0:00 - What We’re Covering
-2:39 - Why Learn to Build AI Agents?
-5:39 - What Are AI Agents?
-6:40 - Chatbot or Agent?
-8:44 - Anatomy of an AI Agent
-12:34 - The Three Ingredients
-13:58 - The Web, APIS, and Tools Explained
-17:04 - Anatomy of a Tool
-18:40 - Schemas: API Instruction Manuals
-23:00 - Advanced Tools Use
-26:11 - Conversational or Automated Agents
-29:23 - Real-World Applications
-32:39 - Foundations Summary
-35:00 - What We’re Building
-38:34 - Build 1
-1:11:12 - Build 2
-1:47:44 - Build 3
-3:01:29 - Build 4
-3:35:29 - The Real Opportunity
-3:39:47 - Three Ways to Win
-3:41:30 - Extending Your Knowledge Gap
-3:45:49 - Getting Your First Clients
-3:48:46 - Next Steps","[""Education""]","[""chatgpt"", ""chatgpt examples"", ""chatgpt explained"", ""generative ai"", ""openai"", ""chatbot tutorial"", ""artificial intelligence"", ""AI"", ""liam ottley"", ""make money with ai"", ""ai business ideas"", ""make money online 2024"", ""make money online"", ""ai automation agency"", ""ai automation"", ""ai agency"", ""ai business"", ""start an ai automation agency"", ""ai business opportunities"", ""business analyst"", ""ai news"", ""ai automation business"", ""ai agent"", ""ai agents"", ""ai agent tutorial"", ""ai tutorial"", ""building ai agents""]","[{""start_time"": 0, ""title"": ""What We’re Covering"", ""end_time"": 159}, {""start_time"": 159, ""title"": ""Why Learn to Build AI Agents?"", ""end_time"": 339}, {""start_time"": 339, ""title"": ""What Are AI Agents?"", ""end_time"": 400}, {""start_time"": 400, ""title"": ""Chatbot or Agent?"", ""end_time"": 524}, {""start_time"": 524, ""title"": ""Anatomy of an AI Agent"", ""end_time"": 754}, {""start_time"": 754, ""title"": ""The Three Ingredients"", ""end_time"": 838}, {""start_time"": 838, ""title"": ""The Web, APIS, and Tools Explained"", ""end_time"": 1024}, {""start_time"": 1024, ""title"": ""Anatomy of a Tool"", ""end_time"": 1120}, {""start_time"": 1120, ""title"": ""Schemas: API Instruction Manuals"", ""end_time"": 1380}, {""start_time"": 1380, ""title"": ""Advanced Tools Use"", ""end_time"": 1571}, {""start_time"": 1571, ""title"": ""Conversational or Automated Agents"", ""end_time"": 1763}, {""start_time"": 1763, ""title"": ""Real-World Applications"", ""end_time"": 1959}, {""start_time"": 1959, ""title"": ""Foundations Summary"", ""end_time"": 2100}, {""start_time"": 2100, ""title"": ""What We’re Building"", ""end_time"": 2314}, {""start_time"": 2314, ""title"": ""Build 1"", ""end_time"": 4272}, {""start_time"": 4272, ""title"": ""Build 2"", ""end_time"": 6464}, {""start_time"": 6464, ""title"": ""Build 3"", ""end_time"": 10889}, {""start_time"": 10889, ""title"": ""Build 4"", ""end_time"": 12929}, {""start_time"": 12929, ""title"": ""The Real Opportunity"", ""end_time"": 13187}, {""start_time"": 13187, ""title"": ""Three Ways to Win"", ""end_time"": 13290}, {""start_time"": 13290, ""title"": ""Extending Your Knowledge Gap"", ""end_time"": 13549}, {""start_time"": 13549, ""title"": ""Getting Your First Clients"", ""end_time"": 13726}, {""start_time"": 13726, ""title"": ""Next Steps"", ""end_time"": 13839}]",ok,en,7072
 EsTrWCV0Ph4,AI Agents Full Course 2026: Master Agentic AI (2 Hours),Nick Saraev,Nick Saraev,UCbo-KbSjJDG6JWQ_MTZ_rNA,20260308,7994,2:13:14,518981,14074,476,0,public,not_live,en,https://www.youtube.com/watch?v=EsTrWCV0Ph4,"🔥 Join Maker School & get customer #1 guaranteed: https://skool.com/makerschool/about
 💎 Check out my SaaS, Clairvo (we 2x your pickup rate): https://clairvo.io?s=nick
 ➡️  Get all AI agent course resources 100% free: https://skool.com/maker-zero/about

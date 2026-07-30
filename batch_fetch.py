@@ -32,6 +32,8 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+
+import grab_watchlist
 from datetime import datetime, timedelta
 
 import requests
@@ -702,6 +704,8 @@ def transcript_pass(records, pool):
 
 
 def main():
+    print("grab_watchlist")
+    grab_watchlist.main()
     print("fetch_metadata")
     print("Fetches yt-dlp metadata and youtube-transcript-api transcripts for every")
     print("video in watchlist.txt, resuming from metadata.json so re-runs only fetch")

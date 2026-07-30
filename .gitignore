@@ -1,3 +1,6 @@
 proxies.txt
 free_proxies.json
 __pycache__/
+config.json
+analysis.db
+t.txt
