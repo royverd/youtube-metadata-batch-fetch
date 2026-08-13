@@ -29,6 +29,7 @@ import random
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -154,22 +155,45 @@ def read_ids(path):
     return list(dict.fromkeys(ids))
 
 
-def fetch(ids):
+YT_DLP_ERROR_RE = re.compile(r"ERROR:\s*\[youtube\]\s*([A-Za-z0-9_-]{11}):\s*(.+)")
+
+
+def fetch(ids, stop_event=None):
     """One yt-dlp process for the whole batch. --dump-json emits newline-delimited
     JSON, one video per line, so we parse the stream as it arrives and print a
-    per-item tick. -i (ignore-errors) means a private/deleted video is silently
-    skipped rather than killing the run - we detect those afterward by diffing."""
+    per-item tick. -i (ignore-errors) means a private/deleted/bot-gated video is
+    silently skipped rather than killing the run - we detect those afterward by
+    diffing, but "silently" used to mean actually silent: stderr went to DEVNULL,
+    so the real per-video reason (private, deleted, "sign in to confirm you're
+    not a bot", etc.) was thrown away and never surfaced. It's drained on a
+    background thread instead now - concurrently, so a large batch's error
+    volume can't fill the OS pipe buffer and deadlock against the stdout read -
+    and yt-dlp's own "ERROR: [youtube] <id>: <reason>" lines are parsed back into
+    a per-video dict so the actual cause can be shown, not just the fact of failure.
+
+    stop_event (set by the GUI's Stop button) kills the yt-dlp process rather
+    than waiting for a long batch to finish - whatever already streamed back is
+    still returned and kept, since it's a resumable partial result like any other."""
     urls = [f"https://www.youtube.com/watch?v={i}" for i in ids]
     proc = subprocess.Popen(
         ["yt-dlp", "--dump-json", "--skip-download", "--ignore-errors", *urls],
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,  # yt-dlp's progress noise; we drive our own counter
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
+        errors="replace",  # yt-dlp's stderr has thrown non-UTF-8 bytes before (e.g. curly quotes) - never crash on it
     )
+
+    stderr_lines = []
+    stderr_thread = threading.Thread(target=lambda: stderr_lines.extend(proc.stderr), daemon=True)
+    stderr_thread.start()
 
     records = []
     for line in proc.stdout:
+        if stop_event is not None and stop_event.is_set():
+            proc.terminate()
+            print("\n  stopped - keeping the metadata that already came back.")
+            break
         line = line.strip()
         if not line:
             continue
@@ -185,8 +209,15 @@ def fetch(ids):
         status = f"[{len(records)}/{len(ids)}] {label}"
         print(f"\r{status[:78]:<78}", end="", flush=True)
     proc.wait()
+    stderr_thread.join()
     print()  # close off the live line before the summary
-    return records
+
+    errors = {}
+    for line in stderr_lines:
+        m = YT_DLP_ERROR_RE.search(line)
+        if m:
+            errors[m.group(1)] = m.group(2).strip()
+    return records, errors
 
 
 ENGLISH_VARIANTS = ("en", "en-US", "en-GB", "en-orig")
@@ -529,22 +560,29 @@ def oembed_title(video_id):
         return None
 
 
-def write_failures(missing, path):
+def write_failures(missing, path, errors=None):
     """Every failed ID gets a row with a clickable URL no matter what; oEmbed
     fills in a title where it still can. status distinguishes 'restricted but
-    identifiable' from 'gone'."""
+    identifiable' from 'gone'. errors carries yt-dlp's own per-video reason
+    (parsed from its stderr in fetch()) so the actual cause - private, deleted,
+    "sign in to confirm you're not a bot", etc. - is visible instead of just
+    the fact that it failed."""
+    errors = errors or {}
     rows = []
     for i in missing:
         title = oembed_title(i)
+        reason = errors.get(i, "")
         rows.append({
             "id": i,
             "url": f"https://www.youtube.com/watch?v={i}",
             "title": title or "",
             "status": "title-only" if title else "unavailable",
+            "error": reason,
         })
-        print(f"  {i} - {title or '(no public metadata - private/deleted)'}")
+        suffix = f" [{reason}]" if reason else ""
+        print(f"  {i} - {title or '(no public metadata - private/deleted)'}{suffix}")
     with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["id", "url", "title", "status"])
+        writer = csv.DictWriter(f, fieldnames=["id", "url", "title", "status", "error"])
         writer.writeheader()
         writer.writerows(rows)
     return rows
@@ -586,7 +624,7 @@ def write_csv(records, path):
             writer.writerow(row)
 
 
-def transcript_pass(records, pool):
+def transcript_pass(records, pool, stop_event=None):
     """Fill in transcripts for records that don't have a settled one yet.
     Reuses 'ok' transcripts and skips permanently disabled/absent ones, so a
     resume run only works on what's actually outstanding.
@@ -608,7 +646,7 @@ def transcript_pass(records, pool):
     Only stops for good once rotate() reports nothing left to try. Progress is
     saved either way (records are mutated in place and written by the
     caller), so a later re-run resumes exactly where this left off. Ctrl-C is
-    safe for the same reason."""
+    safe for the same reason, as is the GUI's Stop button (stop_event)."""
     todo = [r for r in records
             if r.get("transcript_status") not in ({"ok"} | PERMANENT_TRANSCRIPT_STATES)]
     if not todo:
@@ -633,6 +671,9 @@ def transcript_pass(records, pool):
 
     try:
         while i < len(todo):
+            if stop_event is not None and stop_event.is_set():
+                stopped = "stopped by user."
+                break
             rec = todo[i]
             on_direct = pool.on_direct  # evaluated fresh - rotation may have changed this since last iteration
             t0 = time.time()
@@ -679,7 +720,15 @@ def transcript_pass(records, pool):
 
             i += 1
             if i < len(todo) and on_direct:
-                time.sleep(random.uniform(base * (1 - DELAY_JITTER), base * (1 + DELAY_JITTER)))
+                delay = random.uniform(base * (1 - DELAY_JITTER), base * (1 + DELAY_JITTER))
+                # wait() returns early the moment Stop is pressed, so the button
+                # stays responsive through a delay that can run to ~14s.
+                if stop_event is not None:
+                    if stop_event.wait(delay):
+                        stopped = "stopped by user."
+                        break
+                else:
+                    time.sleep(delay)
     except KeyboardInterrupt:
         stopped = "interrupted (Ctrl-C)."
 
@@ -703,38 +752,40 @@ def transcript_pass(records, pool):
         print("    - re-run and pick mode 1 (Webshare) or 2 (your own proxy pool) instead")
 
 
-def main():
-    print("grab_watchlist")
-    grab_watchlist.main()
-    print("fetch_metadata")
-    print("Fetches yt-dlp metadata and youtube-transcript-api transcripts for every")
-    print("video in watchlist.txt, resuming from metadata.json so re-runs only fetch")
-    print("what's still missing.")
-    print()
-    mode = select_transcript_mode()
+def run_pipeline(mode, stop_event=None):
+    """Everything after the watchlist exists: read IDs, fill in missing
+    metadata, then transcripts, then write both outputs. Split out of main()
+    so the CLI and the GUI drive the same code path - the only thing main()
+    adds is the interactive prompts the GUI replaces with its own widgets.
+
+    Returns True if it got as far as writing output. stop_event is threaded
+    through to the two long steps; a stop still writes whatever was gathered,
+    since a partial result is exactly what the resume logic expects to find."""
     pool = build_pool(mode)
 
     print()
     print(f"Reading IDs from {INPUT}")
 
     if not os.path.isfile(INPUT):
-        print(f"Not found: {INPUT}. Run grab_watchlist.py first.")
-        return
+        print(f"Not found: {INPUT}. Fetch the watchlist first.")
+        return False
 
     ids = read_ids(INPUT)
     if not ids:
         print("No usable IDs in the input file.")
-        return
+        return False
 
     # Resume: keep metadata we already have, fetch only ids we've never seen.
     existing = load_existing(JSON_OUT)
     need_meta = [i for i in ids if i not in existing]
     print(f"{len(ids)} IDs - {len(existing)} already have metadata, {len(need_meta)} to fetch.")
 
+    fetch_errors = {}
     if need_meta:
         print("Fetching metadata (visits each video, slow for large lists)...")
         print()
-        for rec in fetch(need_meta):
+        new_records, fetch_errors = fetch(need_meta, stop_event)
+        for rec in new_records:
             existing[rec["id"]] = rec
         print()
 
@@ -742,15 +793,18 @@ def main():
     records = [existing[i] for i in ids if i in existing]
 
     missing = [i for i in ids if i not in existing]
-    if missing:
+    # A stop mid-metadata leaves most of the batch "missing" for reasons that
+    # have nothing to do with the videos, so skip the oEmbed recovery pass
+    # rather than write a failures.csv blaming videos we simply never reached.
+    if missing and not (stop_event is not None and stop_event.is_set()):
         print(f"{len(missing)} have no metadata - recovering titles via oEmbed where possible:")
-        rows = write_failures(missing, FAIL_OUT)
+        rows = write_failures(missing, FAIL_OUT, fetch_errors)
         recovered = sum(1 for r in rows if r["status"] == "title-only")
         print(f"  {recovered}/{len(missing)} identifiable by title; rest are private/deleted.")
         print(f"  Wrote {FAIL_OUT}")
 
     print()
-    transcript_pass(records, pool)
+    transcript_pass(records, pool, stop_event)
     if getattr(pool, "pool_data", None) is not None:
         record_pool_results(pool, pool.pool_data, pool.pool_data_path)
 
@@ -760,8 +814,21 @@ def main():
         print()
         print(f"Wrote {json_path}")
         print(f"Wrote {csv_path}")
-    else:
-        print("Nothing to write.")
+        return True
+
+    print("Nothing to write.")
+    return False
+
+
+def main():
+    print("grab_watchlist")
+    grab_watchlist.main()
+    print("fetch_metadata")
+    print("Fetches yt-dlp metadata and youtube-transcript-api transcripts for every")
+    print("video in watchlist.txt, resuming from metadata.json so re-runs only fetch")
+    print("what's still missing.")
+    print()
+    run_pipeline(select_transcript_mode())
 
 
 if __name__ == "__main__":

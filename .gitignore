@@ -4,3 +4,4 @@ __pycache__/
 config.json
 analysis.db
 t.txt
+failures.csv
