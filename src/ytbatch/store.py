@@ -15,12 +15,12 @@ Deps: none (sqlite3 is stdlib).
 
 import hashlib
 import json
-import os
 import sqlite3
 from datetime import datetime
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "analysis.db")
+from . import paths
+
+DB_PATH = paths.data_file("analysis.db")
 
 AXES = ["depth", "breadth", "rigor", "sourcing", "prerequisites", "density"]
 

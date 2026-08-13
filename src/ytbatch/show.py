@@ -16,15 +16,14 @@ import json
 import os
 import sys
 
-import store
+from . import paths, store
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, OSError):
     pass
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-METADATA = os.path.join(HERE, "metadata.json")
+METADATA = paths.data_file("metadata.json")
 
 BARS = {1: "|....", 2: "||...", 3: "|||..", 4: "||||.", 5: "|||||"}
 
@@ -90,7 +89,7 @@ def main():
     rows = store.load_all(conn)
     conn.close()
     if not rows:
-        print("analysis.db is empty. Run analyze.py first.")
+        print("data/analysis.db is empty. Run ytb-analyze first.")
         return
 
     meta = titles()

@@ -10,13 +10,14 @@ Both backends validate their response through schema.VideoDescription rather
 than trusting the model's JSON, so a provider that honours the schema loosely
 fails loudly here instead of writing half-populated rows into the database.
 
-Deps: anthropic; google-genai only if the gemini provider is selected.
+Deps: requests; anthropic only if that provider is selected (Gemini goes over
+plain REST, not the google-genai SDK).
 """
 
 import json
 import time
 
-import schema
+from . import schema
 
 # Free-tier requests per minute, used to self-pace so we never earn a 429.
 # Only Gemini needs this - Anthropic's paid tiers are far above what a 65-video

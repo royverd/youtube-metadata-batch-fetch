@@ -14,7 +14,7 @@ with no version number to remember to bump.
 Resumable: re-runs only touch videos whose transcript, prompt, model, provider,
 or effort changed. Ctrl-C is safe; each video is committed as it lands.
 
-Deps: anthropic and/or google-genai (whichever provider is selected), pydantic.
+Deps: requests, pydantic; anthropic only if that provider is selected.
 Config: config.py, prompts on first run. Re-run with --config to change it.
 """
 
@@ -23,9 +23,7 @@ import os
 import sys
 import time
 
-import config
-import providers
-import store
+from . import config, paths, providers, store
 
 # Windows console is cp1252 and video titles carry emoji; same guard
 # batch_fetch needs, same reason.
@@ -34,9 +32,8 @@ try:
 except (AttributeError, OSError):
     pass
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-METADATA = os.path.join(HERE, "metadata.json")
-PROMPT_PATH = os.path.join(HERE, "prompts", "describe_v1.txt")
+METADATA = paths.data_file("metadata.json")
+PROMPT_PATH = paths.prompt_file("describe_v1.txt")
 
 # $ per million tokens, for the end-of-run tally only. Anything absent here
 # (the Gemini free tier) reports as free rather than guessing at a number.
@@ -105,9 +102,9 @@ def plan(conn, usable, prompt_version, cfg):
 
 
 def main():
-    print("analyze")
-    print("Describes each video from its transcript and writes analysis.db.")
-    print(f"Config: {os.path.basename(config.CONFIG_PATH)}  Prompt: prompts/{os.path.basename(PROMPT_PATH)}")
+    print("ytb-analyze")
+    print("Describes each video from its transcript and writes data/analysis.db.")
+    print(f"Config: data/{os.path.basename(config.CONFIG_PATH)}  Prompt: prompts/{os.path.basename(PROMPT_PATH)}")
     print()
 
     cfg = config.resolve(force_prompt="--config" in sys.argv)
@@ -120,7 +117,7 @@ def main():
         return
 
     if not os.path.isfile(METADATA):
-        print(f"Not found: {METADATA}. Run batch_fetch.py first.")
+        print(f"Not found: {METADATA}. Run ytb-fetch first.")
         return
     if not os.path.isfile(PROMPT_PATH):
         print(f"Not found: {PROMPT_PATH}.")

@@ -15,6 +15,8 @@ import subprocess
 import sys
 import winreg
 
+from . import paths
+
 # WL is YouTube's private Watch Later playlist. It isn't exportable via Takeout
 # or the Data API, which is the whole reason we go through browser cookies.
 DEFAULT_PLAYLIST = "https://www.youtube.com/playlist?list=WL"
@@ -93,7 +95,7 @@ def grab(browser, playlist_url):
 
 
 def main():
-    print("grab_watchlist")
+    print("ytb-watchlist")
     print("Exports a YouTube playlist to one-ID-per-line via yt-dlp browser cookies.")
     print()
 
@@ -102,7 +104,7 @@ def main():
     # the common case, while still accepting any playlist URL when you want one.
     raw_playlist = input("Playlist URL, or 0 for default (Watch Later): ").strip().strip('"').strip("'")
     playlist = DEFAULT_PLAYLIST if raw_playlist in ("", "0") else raw_playlist
-    out_path = "watchlist.txt"
+    out_path = paths.data_file("watchlist.txt")
 
     print()
     print(f"Fetching from {browser}...")

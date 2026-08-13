@@ -1,7 +1,14 @@
-proxies.txt
-free_proxies.json
+# Generated or secret-bearing. watchlist.txt, metadata.json and metadata.csv
+# live in data/ too but stay tracked - they are the corpus, not scratch.
+data/config.json
+data/analysis.db
+data/failures.csv
+data/free_proxies.json
+data/proxies.txt
+
 __pycache__/
-config.json
-analysis.db
+*.egg-info/
+build/
+dist/
+.venv/
 t.txt
-failures.csv

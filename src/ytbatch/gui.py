@@ -2,7 +2,8 @@
 gui.py
 
 Desktop front end for the two fetch stages: grab_watchlist (playlist -> IDs)
-and batch_fetch (IDs -> metadata.json + metadata.csv, transcripts included).
+and batch_fetch (IDs -> data/metadata.json + data/metadata.csv, transcripts
+included).
 Nothing here reimplements the pipeline - it collects the settings the CLI
 would have prompted for, then calls the same functions.
 
@@ -13,7 +14,7 @@ The work runs on a background thread with stdout piped into the log pane, so
 the window stays responsive and Stop lands immediately - including mid-delay,
 since the transcript pass waits on the stop event rather than sleeping.
 
-Run: python gui.py
+Run: ytb-gui
 Deps: same as batch_fetch (yt-dlp on PATH, youtube-transcript-api). No extras.
 """
 
@@ -26,8 +27,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-import batch_fetch
-import grab_watchlist
+from . import batch_fetch, grab_watchlist, paths
 
 POLL_MS = 60          # log drain interval; fast enough to look live, cheap enough to ignore
 MAX_LOG_LINES = 5000  # trim from the top beyond this - a long run otherwise grows the widget forever
@@ -284,15 +284,16 @@ class App:
     def on_open_folder(self):
         # Explorer only on Windows; the fallbacks keep this usable if the
         # project is ever run from macOS/Linux.
+        folder = str(paths.data_dir())
         try:
             if sys.platform == "win32":
-                os.startfile(batch_fetch.HERE)
+                os.startfile(folder)
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", batch_fetch.HERE])
+                subprocess.Popen(["open", folder])
             else:
-                subprocess.Popen(["xdg-open", batch_fetch.HERE])
+                subprocess.Popen(["xdg-open", folder])
         except Exception as e:
-            messagebox.showerror("Open folder", f"Couldn't open {batch_fetch.HERE}\n{e}")
+            messagebox.showerror("Open folder", f"Couldn't open {folder}\n{e}")
 
     # ---------- worker lifecycle ----------
 

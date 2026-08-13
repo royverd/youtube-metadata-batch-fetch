@@ -1,0 +1,41 @@
+[build-system]
+# >=77 specifically: earlier versions reject the PEP 639 `license = "MIT"`
+# string form below and want a table or a classifier instead.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-metadata-batch-fetch"
+version = "0.1.0"
+description = "Pulls metadata and transcripts for a YouTube playlist, then has an LLM describe each video so you can triage a backlog."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "royverd" }]
+
+# yt-dlp is listed even though it is called as a subprocess rather than
+# imported - installing it here is what puts the binary on PATH inside the
+# venv, which is the dependency that actually matters.
+dependencies = [
+    "yt-dlp",
+    "youtube-transcript-api",
+    "requests",
+    "pydantic",
+]
+
+# Every other provider speaks HTTP through requests. Only Anthropic needs an
+# SDK, so it stays out of the base install.
+[project.optional-dependencies]
+anthropic = ["anthropic"]
+
+[project.scripts]
+ytb-watchlist = "ytbatch.grab_watchlist:main"
+ytb-fetch = "ytbatch.batch_fetch:main"
+ytb-analyze = "ytbatch.analyze:main"
+ytb-show = "ytbatch.show:main"
+
+[project.gui-scripts]
+ytb-gui = "ytbatch.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

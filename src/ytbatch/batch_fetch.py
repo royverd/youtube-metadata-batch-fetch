@@ -1,9 +1,9 @@
 """
-fetch_metadata.py
+batch_fetch.py
 
-Reads YouTube IDs from watchlist.txt and builds one record per video, holding
-both the descriptive metadata (from yt-dlp) and the transcript (from
-youtube-transcript-api). Writes two files beside this script:
+Reads YouTube IDs from data/watchlist.txt and builds one record per video,
+holding both the descriptive metadata (from yt-dlp) and the transcript (from
+youtube-transcript-api). Writes two files into data/:
 
   metadata.json - full record per video, transcript text included.
   metadata.csv  - the metadata columns plus a transcript flag/segment count,
@@ -34,8 +34,9 @@ import time
 import urllib.parse
 import urllib.request
 
-import grab_watchlist
 from datetime import datetime, timedelta
+
+from . import grab_watchlist, paths
 
 import requests
 
@@ -53,12 +54,11 @@ from youtube_transcript_api._errors import (
 )
 from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-INPUT = os.path.join(HERE, "watchlist.txt")
-JSON_OUT = os.path.join(HERE, "metadata.json")
-CSV_OUT = os.path.join(HERE, "metadata.csv")
-FAIL_OUT = os.path.join(HERE, "failures.csv")
-PROXIES_FILE = os.path.join(HERE, "proxies.txt")
+INPUT = paths.data_file("watchlist.txt")
+JSON_OUT = paths.data_file("metadata.json")
+CSV_OUT = paths.data_file("metadata.csv")
+FAIL_OUT = paths.data_file("failures.csv")
+PROXIES_FILE = paths.data_file("proxies.txt")
 
 # Machine-managed pool for mode 2, separate from the hand-edited proxies.txt.
 # proxyscrape is the primary source - it tests proxies itself and reports
@@ -67,7 +67,7 @@ PROXIES_FILE = os.path.join(HERE, "proxies.txt")
 # proxifly is kept as a cheap fallback (no filtering/latency data of its own)
 # in case proxyscrape's API ever changes shape or goes away - cheap enough to
 # leave in even though proxyscrape is expected to make it redundant.
-FREE_PROXIES_FILE = os.path.join(HERE, "free_proxies.json")
+FREE_PROXIES_FILE = paths.data_file("free_proxies.json")
 PROXYSCRAPE_URL = "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&format=json"
 PROXIFLY_URL = "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.json"
 # These lists reportedly churn every 1-30 minutes, so caching for hours would
@@ -821,12 +821,12 @@ def run_pipeline(mode, stop_event=None):
 
 
 def main():
-    print("grab_watchlist")
+    print("ytb-watchlist")
     grab_watchlist.main()
-    print("fetch_metadata")
+    print("ytb-fetch")
     print("Fetches yt-dlp metadata and youtube-transcript-api transcripts for every")
-    print("video in watchlist.txt, resuming from metadata.json so re-runs only fetch")
-    print("what's still missing.")
+    print("video in data/watchlist.txt, resuming from data/metadata.json so re-runs")
+    print("only fetch what's still missing.")
     print()
     run_pipeline(select_transcript_mode())
 

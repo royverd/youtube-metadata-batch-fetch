@@ -3,7 +3,7 @@ config.py
 
 Loads and persists settings for the analysis pipeline: which provider, its key,
 its model, and (where the provider has one) an effort level. Prompts on first
-run, writes config.json beside this file, reuses it after.
+run, writes data/config.json, reuses it after.
 
 Keys are stored per provider so switching back and forth doesn't mean
 re-pasting. config.json is gitignored and nothing here ever prints a key in
@@ -11,7 +11,7 @@ full - a shoulder-surfed console is a leaked credential.
 
 Free-tier terms move faster than this file does. Anything labelled free was free
 when last checked (July 2026); anything labelled paid or trial will bill you or
-run out. `python analyze.py --models` asks the provider what it actually serves,
+run out. `ytb-analyze --models` asks the provider what it actually serves,
 which is the only trustworthy source for model IDs.
 
 Deps: none.
@@ -20,8 +20,9 @@ Deps: none.
 import json
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(HERE, "config.json")
+from . import paths
+
+CONFIG_PATH = paths.data_file("config.json")
 
 EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"]
 DEFAULT_EFFORT = "high"
@@ -261,7 +262,7 @@ def live_models(cfg_for_listing):
     """Ask the provider what it serves. Hardcoded lists in this file were wrong
     for every provider tried, so they are only a fallback for when the listing
     endpoint is unreachable."""
-    import providers  # local: providers does not import config, so no cycle
+    from . import providers  # local: providers does not import config, so no cycle
 
     try:
         names = providers.list_models(cfg_for_listing)
