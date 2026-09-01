@@ -1,11 +1,7 @@
-# Generated or secret-bearing. watchlist.txt, metadata.json and metadata.csv
-# live in data/ too but stay tracked - they are the corpus, not scratch.
-data/config.json
-data/analysis.db
-data/failures.csv
-data/free_proxies.json
-data/proxies.txt
-
+# The whole corpus, not just the secret-bearing parts. Everything here is
+# reproducible by re-running the pipeline, and a clone starting empty beats
+# one carrying someone else's watchlist and API config.
+data/
 __pycache__/
 *.egg-info/
 build/
