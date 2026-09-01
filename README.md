@@ -27,7 +27,7 @@ Python 3.9+ (`str.removeprefix`), setuptools 77+ to build. Developed and run on 
 - **yt-dlp** comes with the install above, which is the point of listing it — both fetch stages shell out to the binary rather than importing it, so what matters is that it lands on PATH.
 - **A browser you're logged into YouTube on, fully closed.** Stage 1 reads its cookie database directly; a running browser holds a lock on it.
 - **An API key** for stage 3. The provider list in [`src/ytbatch/config.py`](src/ytbatch/config.py) is ordered cheapest-first and the top three are free tiers (NVIDIA NIM, Cloudflare Workers AI, OpenRouter `:free`).
-- **Windows.** [`grab_watchlist.py`](src/ytbatch/grab_watchlist.py) imports `winreg` at module scope to detect the default browser, and both [`batch_fetch.py`](src/ytbatch/batch_fetch.py) and [`gui.py`](src/ytbatch/gui.py) import it. Stages 3 and 4 are portable; stages 1 and 2 are not.
+- **Cross-platform, with one soft edge.** Default-browser detection (menu option `0` in stage 1) reads the registry on Windows and shells out to `xdg-settings` elsewhere; on a machine without `xdg-utils`, option `0` just falls through to the numbered browser menu. Everything else, including cookie extraction, is yt-dlp's problem and works anywhere it does. Developed on Windows, verified importable on Linux.
 
 ## Usage
 
@@ -131,7 +131,6 @@ archive/         the pre-metadata transcript fetcher, kept for reference
 
 ## Limitations
 
-- **Windows only** for stages 1 and 2, as above.
 - **Run it from the repo root** unless `YTBATCH_HOME` is set. The console scripts work from anywhere, but "anywhere" is where `data/` gets created.
 - **The metadata fetch has no proxy support.** Only transcripts route through the pool. When yt-dlp hits the bot gate it fails, and those videos land in `data/failures.csv` with the reason — 5 of 67 in the last run, all `Sign in to confirm you're not a bot`. Passing cookies to that call would fix it and currently isn't wired up.
 - **Free proxies are mostly dead.** The pool is public lists; a run can walk dozens of entries without one answering. Mode 1 or 2 is the reliable path.

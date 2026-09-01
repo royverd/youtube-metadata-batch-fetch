@@ -13,7 +13,14 @@ Deps: yt-dlp on PATH. Config: none (kept deliberately flat).
 
 import subprocess
 import sys
-import winreg
+
+# Windows-only stdlib module. Guarded rather than imported at module scope so
+# the fetch stages load at all off Windows - only default-browser detection
+# actually needs it.
+try:
+    import winreg
+except ModuleNotFoundError:
+    winreg = None
 
 from . import paths
 
@@ -30,9 +37,25 @@ BROWSERS = [
 ]
 
 
+# ProgIds look like ChromeHTML, MSEdgeHTM, FirefoxURL-<hash>, OperaStable,
+# BraveHTML; Linux .desktop names like firefox.desktop, google-chrome.desktop.
+# Same substrings identify both, so one table serves both platforms.
+HANDLER_TOKENS = (("chrome", "chrome"), ("edge", "edge"), ("firefox", "firefox"),
+                  ("opera", "opera"), ("brave", "brave"))
+
+
+def _match_handler(handler):
+    for needle, token in HANDLER_TOKENS:
+        if needle in handler:
+            return token
+    return None
+
+
 def detect_default_browser():
-    """Read Windows' default https handler and map it to a yt-dlp token.
-    Returns None if the key is missing or the handler isn't one we know."""
+    """Map the OS's default https handler to a yt-dlp cookie token.
+    Returns None where the handler is missing or isn't one we know."""
+    if winreg is None:
+        return _detect_default_browser_xdg()
     try:
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
@@ -41,12 +64,20 @@ def detect_default_browser():
         progid = winreg.QueryValueEx(key, "ProgId")[0].lower()
     except OSError:
         return None
-    # ProgIds look like ChromeHTML, MSEdgeHTM, FirefoxURL-<hash>, OperaStable, BraveHTML.
-    for needle, token in (("chrome", "chrome"), ("edge", "edge"),
-                          ("firefox", "firefox"), ("opera", "opera"), ("brave", "brave")):
-        if needle in progid:
-            return token
-    return None
+    return _match_handler(progid)
+
+
+def _detect_default_browser_xdg():
+    """Linux/BSD equivalent. xdg-settings is part of xdg-utils and is not
+    guaranteed present, so a missing binary is a None, not a crash."""
+    try:
+        out = subprocess.run(["xdg-settings", "get", "default-web-browser"],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return _match_handler(out.stdout.strip().lower())
 
 
 def select_browser():
