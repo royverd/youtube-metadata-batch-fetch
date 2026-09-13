@@ -96,7 +96,12 @@ KEEP_FIELDS = [
 
 # CSV = the metadata columns plus transcript bookkeeping, but never the text.
 # transcript_text lives only in the JSON.
-CSV_COLUMNS = KEEP_FIELDS + ["transcript_status", "transcript_language", "transcript_segments"]
+# Archive bookkeeping. in_watchlist is the live-queue flag that used to be
+# implicit in a record's mere presence, back when the file was pruned.
+ARCHIVE_FIELDS = ["in_watchlist", "first_seen", "last_seen"]
+
+CSV_COLUMNS = (KEEP_FIELDS + ["transcript_status", "transcript_language",
+                              "transcript_segments"] + ARCHIVE_FIELDS)
 
 # Transcript states that won't change on a re-run, so resume skips them instead
 # of pounding the API again. 'error' is transient (rate-limit/network) and retries.
@@ -778,7 +783,10 @@ def run_pipeline(mode, stop_event=None):
     # Resume: keep metadata we already have, fetch only ids we've never seen.
     existing = load_existing(JSON_OUT)
     need_meta = [i for i in ids if i not in existing]
-    print(f"{len(ids)} IDs - {len(existing)} already have metadata, {len(need_meta)} to fetch.")
+    have = len(ids) - len(need_meta)
+    archived_before = len(existing) - have
+    print(f"{len(ids)} IDs - {have} already have metadata, {len(need_meta)} to fetch."
+          + (f" ({archived_before} archived from earlier runs.)" if archived_before else ""))
 
     fetch_errors = {}
     if need_meta:
@@ -789,8 +797,26 @@ def run_pipeline(mode, stop_event=None):
             existing[rec["id"]] = rec
         print()
 
+    # The file is an archive, not a mirror of the playlist. Removing a video
+    # from Watch Later used to delete its metadata and its transcript on the
+    # next fetch, which quietly destroyed the only copy of work already done
+    # against it. Everything ever fetched is kept; membership of the live queue
+    # is a flag on the record instead of its mere presence in the file.
+    queued_ids = set(ids)
+    today = f"{datetime.now():%Y-%m-%d}"
+    for rec in existing.values():
+        rec["in_watchlist"] = rec["id"] in queued_ids
+        if rec["in_watchlist"]:
+            rec["last_seen"] = today
+        rec.setdefault("first_seen", rec.get("last_seen") or today)
+        rec.setdefault("last_seen", today)
+
     # Follow watchlist order; only ids we actually got metadata for.
     records = [existing[i] for i in ids if i in existing]
+    # Insertion order of `existing` is the order they were last written, so
+    # archived entries keep their relative positions instead of reshuffling.
+    archived = [r for r in existing.values() if not r["in_watchlist"]]
+    everything = records + archived
 
     missing = [i for i in ids if i not in existing]
     # A stop mid-metadata leaves most of the batch "missing" for reasons that
@@ -804,13 +830,18 @@ def run_pipeline(mode, stop_event=None):
         print(f"  Wrote {FAIL_OUT}")
 
     print()
+    # Queued records only: an archived video with a transient 'error' status
+    # would otherwise be retried on every run for the rest of time.
     transcript_pass(records, pool, stop_event)
     if getattr(pool, "pool_data", None) is not None:
         record_pool_results(pool, pool.pool_data, pool.pool_data_path)
 
-    if records:
-        json_path = resilient_write(lambda p: write_json(records, p), JSON_OUT)
-        csv_path = resilient_write(lambda p: write_csv(records, p), CSV_OUT)
+    if everything:
+        if archived:
+            print(f"{len(records)} in the watchlist, {len(archived)} archived "
+                  f"(kept with their transcripts).")
+        json_path = resilient_write(lambda p: write_json(everything, p), JSON_OUT)
+        csv_path = resilient_write(lambda p: write_csv(everything, p), CSV_OUT)
         print()
         print(f"Wrote {json_path}")
         print(f"Wrote {csv_path}")
