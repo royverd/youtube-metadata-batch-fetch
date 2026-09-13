@@ -35,11 +35,12 @@ Python 3.9+ (`str.removeprefix`), setuptools 77+ to build. Developed and run on 
 ytb-fetch      # stages 1+2: playlist -> data/metadata.json + data/metadata.csv
 ytb-analyze    # stage 3: transcripts -> data/analysis.db
 ytb-show       # stage 4: read what stage 3 wrote
+ytb-render     # a hand-written screening table -> a browsable HTML page
 ytb-gui        # stages 1+2 with a window instead of prompts
 ytb-watchlist  # stage 1 alone
 ```
 
-Every one of those is also reachable as `python -m ytbatch.<module>` (`ytbatch.batch_fetch`, `ytbatch.analyze`, `ytbatch.show`, `ytbatch.gui`, `ytbatch.grab_watchlist`) if you'd rather not depend on the console scripts being on PATH. Running a module by file path does not work — the package-relative imports need the package name to exist.
+Every one of those is also reachable as `python -m ytbatch.<module>` (`ytbatch.batch_fetch`, `ytbatch.analyze`, `ytbatch.show`, `ytbatch.render`, `ytbatch.gui`, `ytbatch.grab_watchlist`) if you'd rather not depend on the console scripts being on PATH. Running a module by file path does not work — the package-relative imports need the package name to exist.
 
 `ytb-fetch` runs the watchlist grab first, every time — it prompts for a browser and a playlist URL (`0` for Watch Later), then for how transcript requests get routed:
 
@@ -82,6 +83,31 @@ ytb-show transformer     # every video whose title or subject matches
 
 The six digits are the axis ratings from [`prompts/describe_v1.txt`](prompts/describe_v1.txt): depth, breadth, rigor, sourcing, prerequisites, density, each 1-5. Full view adds the description, who it's for, who it isn't for, a padding estimate, and one verbatim transcript quote per axis — the quotes exist so a rating can be checked against the video instead of taken on faith.
 
+### ytb-render
+
+`ytb-analyze` writes one description per video; a screening pass is the other
+thing you end up with — a Markdown table you wrote by hand, one row per video,
+that nobody wants to read as a table. `ytb-render` turns it into a page with
+search, verdict filters and a compact mode.
+
+```bash
+ytb-render screening.md            # -> screening.html
+ytb-render screening.md out.html
+```
+
+The Markdown is the only source of truth. Everything above the table becomes
+the page header, the chip counts are tallied from the verdict column, and card
+ids are the row numbers — so editing a row and re-running is the whole update
+process. Columns, in order:
+
+| # | Title — Channel (duration) | Type | Visual dep. | Signal | Summary | Goal | For / Not for | Verdict |
+
+The verdict cell has to open with a bolded `**Watch full**`, `**Read summary**`
+or `**Skip**`; that word picks the badge and the filter bucket, and anything
+else lands the row in "Read summary" without complaining. A row with the wrong
+number of columns is an error rather than a mangled card — pipes inside a cell
+need escaping as `\|`.
+
 ## Configuration
 
 `data/config.json` is written on first run of stage 3 and holds the provider choice, per-provider keys, per-provider model, and effort level. Keys are stored per provider, so switching back and forth doesn't mean re-pasting. It is gitignored, and nothing ever prints a key in full.
@@ -113,6 +139,7 @@ Precedence: the provider's env var beats the stored key, but a key typed at the 
 
 ```
 src/ytbatch/     the package - stages, provider adapters, schema, store, paths
+src/ytbatch/templates/  the screening page shell ytb-render fills in
 prompts/         describe_v1.txt; its content hash is the analysis cache key
 data/            everything generated, plus the corpus itself
 archive/         the pre-metadata transcript fetcher, kept for reference

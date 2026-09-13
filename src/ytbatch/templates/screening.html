@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchlist Screening</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --fg: #1c1b19; --muted: #6f6b64; --line: #e4e0d9;
+    --card: #ffffff; --hl: #ffeeb0; --shadow: 0 1px 2px rgba(0,0,0,.05);
+    --watch: #1c6b3f; --watch-bg: #e6f3ea;
+    --summary: #26557f; --summary-bg: #e5eef7;
+    --skip: #8a3826; --skip-bg: #f7e9e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141317; --fg: #e9e6e0; --muted: #9b968d; --line: #2c2a31;
+      --card: #1c1b21; --hl: #574a1c; --shadow: none;
+      --watch: #77cd96; --watch-bg: #16301f;
+      --summary: #8ab9e6; --summary-bg: #16283a;
+      --skip: #e79680; --skip-bg: #35201a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 5.5rem; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    overflow-wrap: anywhere;
+  }
+  .wrap { max-width: 58rem; margin: 0 auto; padding: 0 1.25rem; }
+
+  header { padding: 2.5rem 0 1.25rem; }
+  h1 { font-size: clamp(1.4rem, 4vw, 2rem); margin: 0 0 1rem; letter-spacing: -.02em; }
+  header p { color: var(--muted); font-size: .9rem; margin: .6rem 0; max-width: 46rem; }
+  header strong { color: var(--fg); font-weight: 600; }
+
+  .bar {
+    position: sticky; top: 0; z-index: 20; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: .65rem 0;
+  }
+  .bar .wrap { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+  input[type=search] {
+    flex: 1 1 100%; padding: .55rem .75rem; font-size: .92rem;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card); color: var(--fg);
+  }
+  .chip {
+    flex: 0 1 auto; padding: .4rem .75rem; font-size: .8rem; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--muted); font-family: inherit;
+  }
+  .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .count { margin-left: auto; color: var(--muted); font-size: .8rem; }
+
+  main { padding: 1.25rem 0 5rem; }
+  .v {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.1rem 1.2rem; margin: 0 0 .8rem; box-shadow: var(--shadow);
+  }
+  .head { display: flex; gap: .8rem; align-items: baseline; }
+  .num {
+    color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums;
+    text-decoration: none; flex: 0 0 auto; padding-top: .15rem;
+  }
+  .num:hover { color: var(--fg); }
+  .title { flex: 1 1 auto; min-width: 0; }
+  h2 { font-size: 1.02rem; line-height: 1.35; margin: 0; font-weight: 640; letter-spacing: -.01em; }
+  .sub { margin: .15rem 0 0; color: var(--muted); font-size: .84rem; }
+  .badge {
+    flex: 0 0 auto; align-self: flex-start; white-space: nowrap;
+    font-size: .74rem; font-weight: 600; letter-spacing: .02em;
+    padding: .25rem .6rem; border-radius: 999px;
+  }
+  [data-v="watch-full"] .badge { color: var(--watch); background: var(--watch-bg); }
+  [data-v="read-summary"] .badge { color: var(--summary); background: var(--summary-bg); }
+  [data-v="skip"] .badge { color: var(--skip); background: var(--skip-bg); }
+
+  .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: .7rem 0 0; }
+  .tags span {
+    font-size: .76rem; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px; padding: .15rem .45rem;
+  }
+  .summary { margin: .85rem 0 0; font-size: .93rem; }
+  .grid {
+    display: grid; gap: .9rem 1.4rem; margin-top: 1rem;
+    padding-top: .9rem; border-top: 1px solid var(--line);
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  }
+  .grid h3 {
+    margin: 0 0 .2rem; font-size: .7rem; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--muted); font-weight: 600;
+  }
+  .grid p { margin: 0; font-size: .85rem; }
+  strong { font-weight: 640; }
+  em { color: var(--muted); font-style: italic; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+  mark { background: var(--hl); color: inherit; }
+
+  /* Compact mode: one line per video for scanning. Click a card to open it. */
+  body.compact .detail { display: none; }
+  body.compact .tags { display: none; }
+  body.compact .v { padding: .7rem .9rem; margin-bottom: .35rem; cursor: pointer; }
+  body.compact .v.open .detail, body.compact .v.open .tags { display: block; }
+  body.compact .v.open .tags { display: flex; }
+  .v.hide { display: none; }
+  .empty { color: var(--muted); text-align: center; padding: 3rem 0; }
+  .signal {
+    margin: 0 0 .75rem; font-size: .97rem; line-height: 1.45; font-weight: 550;
+    color: var(--fg); border-left: 3px solid var(--line); padding-left: .7rem;
+  }
+  body.compact .signal { margin: .45rem 0 0; font-weight: 450; color: var(--muted); }
+  body.compact .v.open .signal { color: var(--fg); font-weight: 550; }
+</style>
+</head>
+<body>
+{{HEADER}}
+
+{{FILTERS}}
+<main class="wrap">
+{{CARDS}}
+  <p class="empty" id="empty" hidden>Nothing matches.</p>
+</main>
+
+<script>
+const cards = [...document.querySelectorAll('.v')];
+cards.forEach(c => c.dataset.text = c.textContent.toLowerCase());
+const q = document.getElementById('q');
+const count = document.getElementById('count');
+const empty = document.getElementById('empty');
+const active = new Set();
+
+function apply() {
+  const term = q.value.trim().toLowerCase();
+  let n = 0;
+  for (const c of cards) {
+    const show = (!active.size || active.has(c.dataset.v)) &&
+                 (!term || c.dataset.text.includes(term));
+    c.classList.toggle('hide', !show);
+    if (show) n++;
+  }
+  count.textContent = n + (n === 1 ? ' video' : ' videos');
+  empty.hidden = n > 0;
+}
+
+q.addEventListener('input', apply);
+
+document.querySelectorAll('.chip[data-f]').forEach(c => c.addEventListener('click', () => {
+  const f = c.dataset.f;
+  active.has(f) ? active.delete(f) : active.add(f);
+  c.setAttribute('aria-pressed', active.has(f));
+  apply();
+}));
+
+const dense = document.getElementById('dense');
+dense.addEventListener('click', () => {
+  const on = document.body.classList.toggle('compact');
+  dense.setAttribute('aria-pressed', on);
+  if (!on) cards.forEach(c => c.classList.remove('open'));
+});
+
+// In compact mode a card opens on click — but let links and text selection through.
+document.addEventListener('click', e => {
+  if (!document.body.classList.contains('compact')) return;
+  if (e.target.closest('a') || window.getSelection().toString()) return;
+  const card = e.target.closest('.v');
+  if (card) card.classList.toggle('open');
+});
+</script>
+</body>
+</html>
