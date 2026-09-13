@@ -4,6 +4,8 @@ Pulls metadata and transcripts for a YouTube playlist, then has an LLM describe 
 
 Four stages, each one resumable and each writing its own file. A rate-limit, a crash, or Ctrl-C costs you the item in flight and nothing else.
 
+Co-authored by Claude
+
 ## Install
 
 ```bash
