@@ -29,6 +29,11 @@ PATH = paths.data_file("progress.json")
 # written off. It is a decision, so it counts as decided.
 STATUSES = ("skipped", "scrubbed", "watched_full", "read_summary")
 
+# Ratings carry one decimal place. Whole numbers are stored as ints so the
+# file keeps reading as 7 rather than 7.0 - a cosmetic difference in JSON, but
+# this file is meant to be opened and edited by hand.
+RATING_PLACES = 1
+
 # The three verdicts the screener skill emits, normalised. Stored so a chart
 # can compare what the model said against what the user actually did.
 VERDICTS = ("watch", "read", "skip")
@@ -112,14 +117,32 @@ def set_decision(video_id, status, rating=None):
     elif rating in ("", None):
         rating = None
     elif rating != UNRATED:
-        rating = int(rating)
-        if not 1 <= rating <= 10:
-            raise ValueError(f"rating {rating} out of range 1-10")
+        rating = parse_rating(rating)
     return _update(video_id, {
         "status": status,
         "rating": rating,
         "decided_at": date.today().isoformat(),
     })
+
+
+def parse_rating(value):
+    """Accepts 7, "7", 7.5 or "7,5" -> 7 or 7.5. Rejects anything finer than
+    one decimal rather than silently rounding it: a 7.25 typed on purpose means
+    the scale was misunderstood, and saying so beats storing something else."""
+    try:
+        number = float(str(value).strip().replace(",", "."))
+    except (TypeError, ValueError):
+        raise ValueError(f"rating {value!r} is not a number")
+    if not 1 <= number <= 10:
+        raise ValueError(f"rating {number:g} out of range 1-10")
+    if round(number, RATING_PLACES) != number:
+        raise ValueError(f"rating {number:g} has more than {RATING_PLACES} decimal place")
+    return int(number) if number.is_integer() else number
+
+
+def is_rating(value):
+    """The sentinel is a str and bools are ints, so neither counts as a score."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def screened_ids():
@@ -135,7 +158,7 @@ def summary(total=None):
         "screened": screened,
         "left": None if total is None else max(0, total - screened),
         "decided": sum(1 for e in data.values() if e.get("status")),
-        "rated": sum(1 for e in data.values() if isinstance(e.get("rating"), int)),
+        "rated": sum(1 for e in data.values() if is_rating(e.get("rating"))),
     }
     for v in VERDICTS:
         out[f"verdict_{v}"] = sum(1 for e in data.values() if e.get("ai_verdict") == v)
@@ -143,7 +166,6 @@ def summary(total=None):
         out[s] = sum(1 for e in data.values() if e.get("status") == s)
     # The sentinel is deliberately excluded from the mean - it is a marker,
     # not a score, and averaging it in would drag every statistic down.
-    ratings = [e["rating"] for e in data.values()
-               if isinstance(e.get("rating"), int)]
+    ratings = [e["rating"] for e in data.values() if is_rating(e.get("rating"))]
     out["mean_rating"] = round(sum(ratings) / len(ratings), 2) if ratings else None
     return out

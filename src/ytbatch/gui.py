@@ -121,7 +121,7 @@ def _sort_key(col, row, desc=False):
         # "19.3M" and the column becomes actively misleading.
         return (rank(0), _expand_count(value), "") if value else (rank(1), 0, "")
     if col == "rating":
-        if isinstance(value, int):
+        if progress.is_rating(value):
             return (rank(0), value, "")
         # The skip sentinel is not a score; it sits below every real one.
         return (rank(1), 0, "") if value == progress.UNRATED else (rank(2), 0, "")
@@ -399,6 +399,7 @@ class App:
         entry = ttk.Frame(tab)
         entry.pack(fill="x", pady=(12, 0))
         self.status_choice = tk.StringVar(value="")
+        self.status_choice.trace_add("write", self._on_status_change)
         for value, label in (("watched_full", "Watched in full"),
                              ("scrubbed", "Scrubbed"),
                              ("read_summary", "Read the summary"),
@@ -409,8 +410,10 @@ class App:
         self.sel_lbl.pack(side="right")
         ttk.Label(entry, text="Rating:").pack(side="left", padx=(10, 5))
         self.rating_var = tk.StringVar(value="")
-        ttk.Spinbox(entry, from_=1, to=10, width=4, textvariable=self.rating_var,
-                    values=[""] + [str(i) for i in range(1, 11)]).pack(side="left")
+        # Steps of 0.5 for the arrows, but the field is typeable - the scale
+        # goes to one decimal, and 7.3 should not need nine clicks.
+        ttk.Spinbox(entry, from_=1, to=10, increment=0.5, format="%.1f", width=5,
+                    textvariable=self.rating_var).pack(side="left")
         ttk.Button(entry, text="Save", command=self.on_save_decision,
                    style="Accent.TButton").pack(side="left", padx=(14, 0))
         ttk.Button(entry, text="Open video",
@@ -874,10 +877,27 @@ class App:
         if len(sel) != 1:
             return
         entry = progress.get(sel[0])
+        rating = entry.get("rating")
         self.status_choice.set(entry.get("status") or "")
-        self.rating_var.set(str(entry.get("rating") or ""))
+        # An unrated video opens at the midpoint rather than empty; a rated one
+        # shows what it already has, so Save never quietly changes a score.
+        self.rating_var.set(str(rating) if rating not in (None, "")
+                            else self.DEFAULT_RATING)
+
+    # Midpoint start: the arrows are then at most five steps from either end,
+    # instead of nine from the top when the box opens empty.
+    DEFAULT_RATING = "5"
 
     BULK_CONFIRM = 5  # above this, a mis-click is expensive enough to ask about
+
+    def _on_status_change(self, *_args):
+        """Skipping and scoring are mutually exclusive - a skipped video was
+        never watched. Without this the midpoint default would quietly record
+        a 5 for every skip."""
+        if self.status_choice.get() == "skipped":
+            self.rating_var.set(progress.UNRATED)
+        elif self.rating_var.get() == progress.UNRATED:
+            self.rating_var.set(self.DEFAULT_RATING)
 
     def on_save_decision(self):
         vids = self._selected_videos()
