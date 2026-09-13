@@ -193,6 +193,14 @@ DEFAULTS = {
     "models": {},
     "extras": {},
     "effort": DEFAULT_EFFORT,
+    # App settings, used by the GUI's screening panel rather than the analysis
+    # pipeline. Empty means "work it out at runtime" - stored only once the
+    # user overrides the detected value, so a machine change re-detects
+    # instead of pointing at a binary that moved.
+    "skill_path": "",
+    "claude_bin": "",
+    "browser": "",
+    "screening_md": "",
 }
 
 
