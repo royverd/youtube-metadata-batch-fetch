@@ -206,7 +206,7 @@ def fetch(ids, stop_event=None):
     for line in proc.stdout:
         if stop_event is not None and stop_event.is_set():
             proc.terminate()
-            print("\n  stopped - keeping the metadata that already came back.")
+            print("  stopped - keeping the metadata that already came back.")
             break
         line = line.strip()
         if not line:
@@ -217,11 +217,10 @@ def fetch(ids, stop_event=None):
             continue  # a stray non-JSON line; skip rather than crash the batch
         records.append(prune(rec))
         label = (rec.get("title") or rec.get("id") or "?")
-        # \r overwrites the same line - the running titles are throwaway noise,
-        # the CSV is the real record. Pad to a fixed width so a shorter title
-        # doesn't leave tail characters from a longer previous one.
-        status = f"[{len(records)}/{len(ids)}] {label}"
-        print(f"\r{status[:78]:<78}", end="", flush=True)
+        # One line per video, same as the transcript pass: a "\r" counter here
+        # let each title overwrite the last, so the log only ever showed the
+        # most recent one. The GUI's progress bar is the live counter.
+        print(f"[{len(records)}/{len(ids)}] {label}"[:120], flush=True)
     proc.wait()
     stderr_thread.join()
     print()  # close off the live line before the summary
@@ -900,7 +899,11 @@ def transcript_pass(records, pool, stop_event=None):
             rec["transcript_language"] = lang
             tag = f"{status}/{lang}" if lang else status
             label = f"[{i + 1}/{len(todo)}] {tag:11} {rec.get('title') or rec['id']} ({pool.label})"
-            print(f"\r{label[:78]:<78}", end="", flush=True)
+            # One line per attempt. This used to be a "\r" live counter, and
+            # every success overwrote the line before it - once a proxy held,
+            # videos 13-225 each replaced the previous and the log jumped from
+            # [12/226] straight to [226/226]. The progress bar is the counter.
+            print(label[:120], flush=True)
 
             block_signal = status == "blocked"
             if status == "error":
@@ -926,7 +929,7 @@ def transcript_pass(records, pool, stop_event=None):
                     reason = "error"  # no tolerance here, so this is always the first and only one
                 if pool.rotate():
                     consecutive_errors = 0
-                    print(f"\n  {reason} on {old_label} - rotating to {pool.label}")
+                    print(f"  {reason} on {old_label} - rotating to {pool.label}")
                     continue  # retry this same video on the newly-rotated proxy
                 stopped = ("YouTube is blocking this IP (RequestBlocked/IpBlocked)." if status == "blocked"
                            else f"{consecutive_errors} errors in a row - the IP looks blocked." if on_direct
