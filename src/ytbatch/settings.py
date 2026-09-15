@@ -31,10 +31,18 @@ DEFAULTS = {
     "theme": "light",
     "fullscreen": False,
     "geometry": "",       # "WxH+X+Y", empty means size to the screen
-    "sash": 0,            # notebook/log split, in pixels from the top; 0 = auto
+    "page": "fetch",      # sidebar page shown on start
+    "log_open": True,     # the log drawer stays open until hidden
+    "log_height": 180,
+    "font_family": "",    # empty = first of theme.UI_FONTS that is installed
+    "font_size": 14,      # body text in pixels; headings and hints scale from it
+    "guide_seen": False,  # the guide opens by itself until it has been closed once
     "review_sort": "num",
     "review_desc": False,
     "review_widths": {},
+    "colors": {},         # {"light"|"dark": {role: "#rrggbb"}}, only what was changed
+    "recent_colors": [],  # newest first, for the picker's swatch row
+    "color_presets": {},  # your saved presets: {name: full palette}
 }
 
 

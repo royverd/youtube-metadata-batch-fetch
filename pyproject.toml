@@ -21,6 +21,7 @@ dependencies = [
     "youtube-transcript-api",
     "requests",
     "pydantic",
+    "customtkinter",
 ]
 
 # Every other provider speaks HTTP through requests. Only Anthropic needs an
