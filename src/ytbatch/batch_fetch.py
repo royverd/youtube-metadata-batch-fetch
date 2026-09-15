@@ -27,8 +27,10 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -538,16 +540,115 @@ def build_pool(mode):
     return ApiPool([direct_api], [direct_label], is_direct=[True])
 
 
-def load_existing(path):
-    """Prior output keyed by id, for resume. A corrupt/half-written file just
-    means we start fresh rather than crash - the data is re-fetchable."""
+# The corpus's append-only record. metadata.json is a snapshot rebuilt from
+# this plus itself; this file is the thing that cannot lose data.
+JOURNAL = paths.data_file("metadata.journal.jsonl")
+
+# Bookkeeping recomputed on every run. A change here alone is not new
+# content, and counting it would append the whole 20 MB corpus every day.
+_VOLATILE = frozenset(ARCHIVE_FIELDS)
+
+
+class CorpusUnreadable(RuntimeError):
+    """metadata.json exists but could not be read, and the journal has
+    nothing to fall back on. Never treated as empty."""
+
+
+class CorpusShrink(RuntimeError):
+    """A write to metadata.json would have dropped ids already in it."""
+
+
+def merge_record(old, new):
+    """new's fields over old's, except that a record with no transcript yet
+    never erases one that has it - a re-fetched video arrives without one.
+    Returns a new dict."""
+    merged = dict(old)
+    merged.update(new)
+    if old.get("transcript_text") and not new.get("transcript_text"):
+        for key in ("transcript_text", "transcript_segments",
+                    "transcript_status", "transcript_language"):
+            if key in old:
+                merged[key] = old[key]
+    return merged
+
+
+def append_journal(records, path=JOURNAL):
+    """The journal's only writer, and it only ever opens the file in append
+    mode. That is the entire guarantee: nothing here can truncate or rewrite
+    it, so every record that ever reached disk stays recoverable whatever
+    happens to metadata.json. Never add a second writer or open this path
+    with "w"."""
+    if not records:
+        return 0
+    with open(path, "a", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    return len(records)
+
+
+def read_journal(path=JOURNAL):
+    """Folds the journal into {id: record}, later lines merged over earlier.
+    A torn final line - a crash mid-append - is skipped rather than fatal."""
+    out = {}
     if not os.path.isfile(path):
-        return {}
+        return out
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("id"):
+                old = out.get(rec["id"])
+                out[rec["id"]] = merge_record(old, rec) if old else rec
+    return out
+
+
+def _content(rec):
+    return {k: v for k, v in rec.items() if k not in _VOLATILE}
+
+
+def journal_changes(records, journal):
+    """The records whose content differs from the journal's latest version."""
+    return [r for r in records
+            if r["id"] not in journal or _content(r) != _content(journal[r["id"]])]
+
+
+def _read_snapshot(path):
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return {r["id"]: r for r in data if isinstance(r, dict) and r.get("id")}
+
+
+def load_existing(path, journal_path=JOURNAL):
+    """Everything known, keyed by id: the metadata.json snapshot merged over
+    the journal. Neither present is a first run.
+
+    A missing or unreadable snapshot falls back to the journal, and says so.
+    With no journal either, an unreadable snapshot raises. It used to return
+    {} on the grounds that the data is re-fetchable - and the run then saw
+    every id as new and wrote the 3 records it had over 648. Transcripts are
+    not practically re-fetchable in bulk (the IP gets blocked)."""
+    journal = read_journal(journal_path)
+    if not os.path.isfile(path):
+        if journal:
+            print(f"  {os.path.basename(path)} is missing - rebuilt {len(journal)} "
+                  f"records from {os.path.basename(journal_path)}.")
+        return journal
     try:
-        with open(path, encoding="utf-8") as f:
-            return {r["id"]: r for r in json.load(f) if r.get("id")}
-    except (json.JSONDecodeError, OSError, KeyError):
-        return {}
+        snapshot = _read_snapshot(path)
+    except (ValueError, OSError, TypeError) as e:  # ValueError covers JSON and Unicode errors
+        if journal:
+            print(f"  {path} could not be read ({type(e).__name__}: {e}) - "
+                  f"using the {len(journal)} records in the journal.")
+            return journal
+        raise CorpusUnreadable(f"{path} exists but could not be read ({type(e).__name__}: {e})") from e
+    merged = dict(journal)
+    for vid, rec in snapshot.items():
+        merged[vid] = merge_record(merged[vid], rec) if vid in merged else rec
+    return merged
 
 
 def oembed_title(video_id):
@@ -608,9 +709,41 @@ def resilient_write(write_fn, path):
         return alt
 
 
-def write_json(records, path):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
+def write_json(records, path, allow_shrink=False):
+    """Temp file then replace, with the previous version kept as .bak. Writing
+    in place truncated the corpus the moment open() ran, so anything that
+    stopped the dump - or a run that had loaded nothing - left no copy.
+
+    Refuses to drop an id already in the file. Checked here, at the lowest
+    level, so no caller present or future can shrink the corpus by passing
+    the wrong list; allow_shrink exists so a deliberate reset has to say so.
+    An unreadable file can't be checked - its bytes survive in .bak and its
+    records in the journal."""
+    if not allow_shrink and os.path.isfile(path):
+        try:
+            before = set(_read_snapshot(path))
+        except (ValueError, OSError, TypeError):
+            before = set()
+        missing = before - {r["id"] for r in records}
+        if missing:
+            raise CorpusShrink(f"refusing to write {path}: {len(missing)} id(s) already "
+                               f"in it are not in the new data")
+    d = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".metadata-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.isfile(path):
+            shutil.copy2(path, path + ".bak")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def write_csv(records, path):
@@ -781,7 +914,13 @@ def run_pipeline(mode, stop_event=None):
         return False
 
     # Resume: keep metadata we already have, fetch only ids we've never seen.
-    existing = load_existing(JSON_OUT)
+    try:
+        existing = load_existing(JSON_OUT)
+    except CorpusUnreadable as e:
+        print(f"Stopping before fetching anything: {e}")
+        print(f"  Nothing was written. Restore it from {JSON_OUT}.bak if that exists,")
+        print("  or move the broken file aside to start a fresh corpus deliberately.")
+        return False
     need_meta = [i for i in ids if i not in existing]
     have = len(ids) - len(need_meta)
     archived_before = len(existing) - have
@@ -837,10 +976,46 @@ def run_pipeline(mode, stop_event=None):
         record_pool_results(pool, pool.pool_data, pool.pool_data_path)
 
     if everything:
+        # Append-only, enforced mechanically rather than by this code being
+        # right: (1) every record goes to the journal, which is only ever
+        # opened for appending; (2) a snapshot write that would drop an id is
+        # refused inside write_json. The merge below just makes the normal
+        # case pass those checks - the guarantee doesn't rest on it.
+        try:
+            on_disk = load_existing(JSON_OUT)
+        except CorpusUnreadable as e:
+            append_journal(journal_changes(everything, read_journal()))
+            side = f"{os.path.splitext(JSON_OUT)[0]}.unmerged-{datetime.now():%Y%m%d_%H%M%S}.json"
+            write_json(everything, side)
+            print(f"Not touching {JSON_OUT}: {e}")
+            print(f"  This run's {len(everything)} records are in {JOURNAL} and {side}.")
+            return False
+        # In place, so records/archived keep pointing at the merged dicts.
+        for rec in everything:
+            old = on_disk.get(rec["id"])
+            if old:
+                merged = merge_record(old, rec)
+                rec.clear()
+                rec.update(merged)
+        held = {r["id"] for r in everything}
+        carried = [dict(r, in_watchlist=False) for vid, r in on_disk.items() if vid not in held]
+        if carried:
+            print(f"  Kept {len(carried)} record(s) already on disk that this run didn't load.")
+            archived += carried
+            everything += carried
         if archived:
             print(f"{len(records)} in the watchlist, {len(archived)} archived "
                   f"(kept with their transcripts).")
-        json_path = resilient_write(lambda p: write_json(everything, p), JSON_OUT)
+        # Journal first: if the snapshot write dies, the journal is already ahead.
+        appended = append_journal(journal_changes(everything, read_journal()))
+        if appended:
+            print(f"  Appended {appended} new or changed record(s) to {os.path.basename(JOURNAL)}.")
+        try:
+            json_path = resilient_write(lambda p: write_json(everything, p), JSON_OUT)
+        except CorpusShrink as e:
+            print(f"Not touching {JSON_OUT}: {e}")
+            print(f"  Every record from this run is in {JOURNAL}; nothing was lost.")
+            return False
         csv_path = resilient_write(lambda p: write_csv(everything, p), CSV_OUT)
         print()
         print(f"Wrote {json_path}")

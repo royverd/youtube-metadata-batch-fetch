@@ -234,6 +234,8 @@ Precedence: the provider's env var beats the stored key, but a key typed at the 
 
 ## How it works
 
+**The corpus is append-only by construction.** Every metadata record is appended to `data/metadata.journal.jsonl`, which the code only ever opens for appending, so nothing the program does can shorten it. `data/metadata.json` is a snapshot built from the journal plus itself: a write that would drop an ID already in it is refused, the previous version is kept as `metadata.json.bak`, and a missing or unreadable snapshot is rebuilt from the journal on the next run. This exists because an earlier version treated an unreadable `metadata.json` as empty and wrote 3 records over 648. It does not protect against deleting `data/` by hand or losing the disk — back that up yourself.
+
 **Resume is per-item, not per-run.** Stage 2 keys `data/metadata.json` by video ID and only fetches IDs it has never seen; videos that leave the watchlist stay in it, flagged as archived. Transcripts marked `disabled` or `none` are permanent and never retried; `error` is transient and retries next run. Stage 3 keys `data/analysis.db` on four columns — transcript hash, prompt file hash, `provider:model`, effort — and re-analyzes exactly the videos whose key moved. Screening is recorded per video id in `data/progress.json`, and only ids that actually appear in the output get marked, so a run that dies halfway never flags a video as screened.
 
 **The origin IP is treated differently from proxies.** youtube-transcript-api scrapes YouTube directly, so heavy use gets the IP blocked for hours to a day. The origin IP gets spaced requests (3-10s, scaled to batch size, jittered) and tolerates a few transient errors before reacting. Proxies get neither: no delay, and any single failure rotates immediately, because a mostly-dead free pool isn't worth protecting and burning three real videos on a dead proxy is worse than skipping it. Outcomes persist to `data/free_proxies.json` with the latency of the successful fetch, so the next run tries known-good fastest-first and never re-tries a proven-dead one.
@@ -260,7 +262,9 @@ archive/                the pre-metadata transcript fetcher, kept for reference
 | File | Written by | Contents |
 |---|---|---|
 | `data/watchlist.txt` | stage 1 | One video ID per line |
-| `data/metadata.json` | stage 2 | Full record per video, transcript text included |
+| `data/metadata.json` | stage 2 | Full record per video, transcript text included. A snapshot; see the journal |
+| `data/metadata.journal.jsonl` | stage 2 | Append-only: every record ever written, one JSON line each. The corpus of last resort |
+| `data/metadata.json.bak` | stage 2 | The snapshot as it was before the latest write |
 | `data/metadata.csv` | stage 2 | Same metadata columns plus transcript status and segment count — never the text |
 | `data/failures.csv` | stage 2 | IDs yt-dlp couldn't extract, with its actual reason and an oEmbed-recovered title where one exists |
 | `data/analysis.db` | stage 3 | SQLite, one row per described video |
