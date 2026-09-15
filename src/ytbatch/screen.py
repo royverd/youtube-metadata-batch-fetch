@@ -126,8 +126,9 @@ class ScreenError(RuntimeError):
 # ---------- discovery ----------
 
 def find_skill():
-    """Walks up from the working directory. The skill normally lives above the
-    repo, shared across sibling projects, so a repo-relative guess misses it."""
+    """Walks up from the corpus folder, nearest first. The repo ships its own
+    copy at .claude/skills/, which a clone finds at the first step; a shared
+    copy further up is only reached where the corpus has none."""
     d = paths.home().resolve()
     for candidate in [d, *d.parents]:
         p = candidate / SKILL_REL

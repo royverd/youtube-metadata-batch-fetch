@@ -109,7 +109,7 @@ Python 3.9+ (`str.removeprefix`), setuptools 77+ to build. Developed and run on 
 - **tkinter**, for `ytb-gui`. It ships with Python on Windows and macOS; on Linux it is a system package (`python3-tkinter` on Fedora, `python3-tk` on Debian/Ubuntu). CustomTkinter, which the app is built on, comes with the install above.
 - **A browser you're logged into YouTube on, fully closed.** Stage 1 reads its cookie database directly; a running browser holds a lock on it.
 - **For screening, either an AI CLI or an API key.** Subscription mode runs `claude`, `codex`, `gemini` or `opencode` in a new terminal window: Windows Terminal or `cmd` on Windows, Terminal.app on macOS, and on Linux the first of konsole, gnome-terminal, alacritty, kitty, foot or xterm. API mode and stage 3 use a provider from [`src/ytbatch/config.py`](src/ytbatch/config.py), ordered cheapest-first; Ollama and LM Studio run locally with no key.
-- **The screener skill**, `.claude/skills/youtube-video-screener/SKILL.md`, found by walking up from the corpus folder, or set its path in Settings. It is the screening prompt and is not part of this repo.
+- **The screener skill** ships with the repo at [`.claude/skills/youtube-video-screener/SKILL.md`](.claude/skills/youtube-video-screener/SKILL.md). It is the screening prompt. The app finds it by walking up from the corpus folder, so a clone uses this copy; point Settings → Screener SKILL.md elsewhere to use your own.
 - **PyGObject**, optional and Linux-only, for the colour editor's eyedropper. It reads a screen pixel through the XDG desktop portal, which is the only way to on Wayland. Without it — including on Windows and macOS — the button says so and the rest of the editor works.
 - **Cross-platform, with soft edges.** Default-browser detection (option `0` in stage 1, System default in the app) reads the registry on Windows and `xdg-settings` on Linux; on macOS, and on Linux without `xdg-utils`, pick the browser explicitly. The fetch stages were developed on Windows; the app and screening were developed on Fedora KDE (Wayland) and have not been run on Windows or macOS.
 
@@ -242,7 +242,7 @@ Precedence: the provider's env var beats the stored key, but a key typed at the 
 
 **Adding a provider is a config edit.** Anything speaking the OpenAI chat-completions shape is picked up from its `base_url` with no new code — only Anthropic and Gemini have their own adapters in [`providers.py`](src/ytbatch/providers.py). Ollama and LM Studio are two such entries pointing at localhost.
 
-**The screening prompt is not in this repo.** The screener skill is read fresh on every run, so editing it changes the output with nothing here to update.
+**The screening prompt is a file, not code.** The screener skill is read fresh on every run, so editing it - by hand or with Edit skill in the app - changes the output with nothing in the Python to update.
 
 **Paths resolve from one module.** [`paths.py`](src/ytbatch/paths.py) is the only place that decides where anything lives. Before the package layout every module pinned its own directory off `__file__`, which stops working the moment pip can move the code somewhere you'd never want your transcripts written.
 
