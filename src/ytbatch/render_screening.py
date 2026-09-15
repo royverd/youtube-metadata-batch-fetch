@@ -23,6 +23,25 @@ from pathlib import Path
 USAGE = "usage: ytb-render-screening [screening.md] [out.html]"
 
 SLUG = {"Watch": "watch", "Read this and move on": "read", "Skip": "skip"}
+_LEADING = {"watch": "watch", "read": "read", "skip": "skip"}
+
+
+def verdict_slug(verdict):
+    """Verdict text -> 'watch' / 'read' / 'skip', or None.
+
+    The skill's exact words first, then the leading word alone: models add
+    qualifiers - 'Watch (by chapter)', 'Watch (if you use Godot)', 'Skip -
+    unless ...' - that don't change which bucket a video belongs in, and an
+    exact match left those unrecorded and stopped the render. Only the first
+    word decides, so 'Skip reading this' can never land in read."""
+    text = (verdict or "").strip()
+    if text in SLUG:
+        return SLUG[text]
+    # Emphasis removed everywhere, not just at the ends: '**Read** and move
+    # on' otherwise yields 'read**' as its first word.
+    plain = re.sub(r"[*_`]", "", text).strip().lower()
+    first = re.split(r"[\s(\[\-–—:,;/.]+", plain, maxsplit=1)[0]
+    return _LEADING.get(first)
 
 BLOCK = re.compile(r"<details>\s*(.*?)\s*</details>", re.S)
 SUMMARY = re.compile(r"<summary>\s*(.*?)\s*</summary>", re.S)
@@ -133,10 +152,10 @@ def build(md_text):
         if not m:
             raise SystemExit(f"Block {n} has no <summary> line.")
         title, channel, verdict, gist = split_summary(m.group(1))
-        slug = SLUG.get(verdict)
+        slug = verdict_slug(verdict)
         if slug is None:
             raise SystemExit(f"Block {n}: unknown verdict {verdict!r}. "
-                             f"Expected one of {', '.join(SLUG)}.")
+                             f"Expected one starting with Watch, Read or Skip.")
         tally[slug] += 1
         # Removed entries share the "—" label, so anchors fall back to an index.
         anchor = n if str(n).isdigit() else f"x{len(cards) + 1}"

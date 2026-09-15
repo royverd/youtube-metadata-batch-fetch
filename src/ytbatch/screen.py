@@ -488,6 +488,12 @@ def run_api(n, cfg, stop_event=None):
 
 # ---------- reading the result back ----------
 
+# (video id, verdict) pairs already reported as unreadable. record_results
+# runs every 5 seconds while a screening terminal is open, and without this
+# the same four warnings were printed on every pass for the whole session.
+_WARNED = set()
+
+
 def record_results(md_path, wanted_ids=None):
     """Parses the screening file for id/verdict pairs and writes them into
     progress.json. Only ids that actually appear get marked - a run that died
@@ -509,9 +515,11 @@ def record_results(md_path, wanted_ids=None):
         if not m:
             continue
         _, _, verdict, _ = rs.split_summary(m.group(1))
-        slug = rs.SLUG.get(verdict)
+        slug = rs.verdict_slug(verdict)
         if slug is None:
-            print(f"  {vid}: unknown verdict {verdict!r} - not recorded.")
+            if (vid, verdict) not in _WARNED:
+                _WARNED.add((vid, verdict))
+                print(f"  {vid}: unknown verdict {verdict!r} - not recorded.")
             continue
         progress.mark_screened(vid, slug)
         count += 1
@@ -564,7 +572,7 @@ def backfill_ids(md_path=None, cfg=None):
             continue
         title, _, verdict, _ = rs.split_summary(m.group(1))
         vid = match(title)
-        slug = rs.SLUG.get(verdict)
+        slug = rs.verdict_slug(verdict)
         if vid and slug:
             progress.mark_screened(vid, slug)
             hits += 1
