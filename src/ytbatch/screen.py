@@ -514,14 +514,18 @@ def record_results(md_path, wanted_ids=None):
         m = rs.SUMMARY.search(block)
         if not m:
             continue
-        _, _, verdict, _ = rs.split_summary(m.group(1))
+        title, channel, verdict, _ = rs.split_summary(m.group(1))
         slug = rs.verdict_slug(verdict)
         if slug is None:
             if (vid, verdict) not in _WARNED:
                 _WARNED.add((vid, verdict))
                 print(f"  {vid}: unknown verdict {verdict!r} - not recorded.")
             continue
-        progress.mark_screened(vid, slug)
+        # Title and channel from the write-up itself, so the entry is readable
+        # even if metadata.json is gone; the corpus fills in the rest later.
+        progress.mark_screened(vid, slug, video={
+            "title": title, "channel": channel,
+            "webpage_url": f"https://www.youtube.com/watch?v={vid}"})
         count += 1
     return count
 
@@ -552,9 +556,10 @@ def backfill_ids(md_path=None, cfg=None):
     md_path = md_path or screening_path(cfg or {})
     text = Path(md_path).read_text(encoding="utf-8")
     corpus = load_corpus()
-    exact = {}
+    exact, by_id = {}, {}
     for _, rec in corpus:
         exact.setdefault(_norm(rec.get("title")), rec["id"])
+        by_id[rec["id"]] = rec
 
     def match(title):
         key = _norm(title)
@@ -574,7 +579,7 @@ def backfill_ids(md_path=None, cfg=None):
         vid = match(title)
         slug = rs.verdict_slug(verdict)
         if vid and slug:
-            progress.mark_screened(vid, slug)
+            progress.mark_screened(vid, slug, video=by_id.get(vid))
             hits += 1
         else:
             misses += 1

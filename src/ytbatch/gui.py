@@ -1361,34 +1361,40 @@ class App:
     # ---------- review ----------
 
     def refresh_review(self):
+        """Rows come from progress.json, one per entry - never from the
+        corpus. Built the other way round, a review only existed on screen
+        while its video was in metadata.json, and losing the metadata hid
+        every review. The corpus only supplies fresher details and the queue
+        position; each entry's own snapshot covers what the corpus lacks."""
         try:
             corpus = screen.load_corpus()
+            corpus_error = None
         except (OSError, ValueError) as e:
-            self.review_lbl.configure(
-                text=f"No corpus at {paths.home()} - {e}. "
-                     f"Set the corpus folder in Settings.")
-            self.tree.delete(*self.tree.get_children())
-            return
+            corpus, corpus_error = [], e
+        self._corpus_by_id = {rec["id"]: (pos, rec) for pos, rec in corpus}
+        if corpus:
+            # Keeps each entry's snapshot current, so the next time the corpus
+            # is missing the table still has today's title and view count.
+            progress.sync_videos(rec for _, rec in corpus)
         data = progress.load()
 
         rows = []
-        for pos, rec in corpus:
-            entry = data.get(rec["id"])
-            if not entry:
-                continue
+        for vid, entry in data.items():
             rating = entry.get("rating")
             # "Decided" is anything carrying a rating, sentinel included -
             # which is the whole reason a skip stores "-" rather than nothing.
             if self.hide_decided.get() and rating not in (None, ""):
                 continue
-            rows.append((rec["id"], {
-                # Archived videos carry no queue position; the dash says
-                # "kept, but no longer in your watchlist".
+            pos, rec = self._corpus_by_id.get(vid, ("", None))
+            info = {**(entry.get("video") or {}), **progress.video_snapshot(rec or {})}
+            rows.append((vid, {
+                # No queue position - archived, or not in the corpus at all -
+                # reads as a dash: "kept, but not in your watchlist right now".
                 "num": pos if pos != "" else progress.UNRATED,
-                "date": _pretty_date(rec.get("upload_date")),
-                "title": rec.get("title", ""),
-                "channel": rec.get("channel", ""),
-                "views": _short_count(rec.get("view_count")),
+                "date": _pretty_date(info.get("upload_date")),
+                "title": info.get("title") or vid,
+                "channel": info.get("channel", ""),
+                "views": _short_count(info.get("view_count")),
                 "ai": entry.get("ai_verdict", ""),
                 "status": (entry.get("status") or "").replace("_", " "),
                 "rating": "" if rating is None else rating,
@@ -1408,8 +1414,12 @@ class App:
         s = progress.summary(len(corpus))
         mean = "-" if s["mean_rating"] is None else s["mean_rating"]
         shown = f"{len(rows)} shown  -  " if len(rows) != s["screened"] else ""
+        missing = sum(1 for vid in data if vid not in self._corpus_by_id)
+        note = (f"No corpus at {paths.home()} ({corpus_error}); showing saved details  -  "
+                if corpus_error else
+                f"{missing} not in metadata.json, shown from saved details  -  " if missing else "")
         self.review_lbl.configure(
-            text=f"{shown}{s['decided']} decided of {s['screened']} screened  -  "
+            text=f"{note}{shown}{s['decided']} decided of {s['screened']} screened  -  "
                  f"watched {s['watched_full']} / scrubbed {s['scrubbed']} / "
                  f"read {s['read_summary']} / skipped {s['skipped']}  -  "
                  f"mean rating {mean} over {s['rated']}")
@@ -1496,7 +1506,8 @@ class App:
         saved, failed = 0, None
         for vid in vids:
             try:
-                progress.set_decision(vid, status, raw or None)
+                progress.set_decision(vid, status, raw or None,
+                                      video=self._corpus_by_id.get(vid, ("", None))[1])
             except ValueError as e:
                 failed = e  # a bad rating fails identically for every row
                 break

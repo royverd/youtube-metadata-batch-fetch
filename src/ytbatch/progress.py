@@ -13,6 +13,13 @@ ride along with anything disposable.
 Keyed on video id. Corpus position is not stable between fetches and has
 already been observed to reorder and drop entries mid-project.
 
+Standalone: each entry carries a "video" snapshot (title, channel, date,
+views, duration, url) alongside the verdict and decision, so a review can be
+shown and understood without metadata.json. The snapshot is refreshed from
+the corpus when it is available, and a field is only ever overwritten by a
+non-empty value - losing metadata once erased every review from the Review
+table, which read titles from the corpus alone.
+
 Deps: none.
 """
 
@@ -86,28 +93,71 @@ def get(video_id):
     return load().get(video_id, {})
 
 
-def _update(video_id, fields):
+# What an entry keeps about the video itself - enough to list it, find it and
+# open it with no corpus at all. Transcripts stay in metadata.json.
+VIDEO_FIELDS = ("title", "channel", "upload_date", "duration_string", "view_count", "webpage_url")
+
+
+def video_snapshot(record):
+    """The VIDEO_FIELDS of a metadata record (or any dict), empties dropped."""
+    return {k: record[k] for k in VIDEO_FIELDS
+            if isinstance(record, dict) and record.get(k) not in (None, "")}
+
+
+def _merge_video(entry, video):
+    """Folds video fields into entry["video"]. Returns True if anything
+    changed. Blanks never overwrite: a thinner source (a write-up with only a
+    title) must not wipe what a fuller one already stored."""
+    fresh = video_snapshot(video or {})
+    if not fresh:
+        return False
+    current = entry.get("video") if isinstance(entry.get("video"), dict) else {}
+    merged = {**current, **fresh}
+    if merged == current:
+        return False
+    entry["video"] = merged
+    return True
+
+
+def _update(video_id, fields, video=None):
     """Read-modify-write the whole file. 600 entries is a few hundred KB and
     the alternative is a database; existing keys survive so the file stays
     hand-extensible."""
     data = load()
     entry = data.get(video_id, {})
     entry.update(fields)
+    _merge_video(entry, video)
     data[video_id] = entry
     save(data)
     return entry
 
 
-def mark_screened(video_id, ai_verdict, screened_at=None):
+def sync_videos(records):
+    """Refreshes the video snapshot of every entry the given metadata records
+    cover, in one read and at most one write. records is any iterable of
+    metadata dicts. Returns how many entries changed."""
+    data = load()
+    by_id = {r["id"]: r for r in records if isinstance(r, dict) and r.get("id")}
+    changed = sum(1 for vid, entry in data.items()
+                  if vid in by_id and _merge_video(entry, by_id[vid]))
+    if changed:
+        save(data)
+    return changed
+
+
+def mark_screened(video_id, ai_verdict, screened_at=None, video=None):
+    """Keeps the first screened_at. Recording re-reads the whole output
+    every 5 seconds while a session runs, and stamping today on each pass
+    rewrote every video's real screening date to the latest pass."""
     if ai_verdict not in VERDICTS:
         raise ValueError(f"unknown verdict {ai_verdict!r}; expected one of {VERDICTS}")
-    return _update(video_id, {
-        "ai_verdict": ai_verdict,
-        "screened_at": screened_at or date.today().isoformat(),
-    })
+    fields = {"ai_verdict": ai_verdict}
+    if screened_at or not get(video_id).get("screened_at"):
+        fields["screened_at"] = screened_at or date.today().isoformat()
+    return _update(video_id, fields, video)
 
 
-def set_decision(video_id, status, rating=None):
+def set_decision(video_id, status, rating=None, video=None):
     """rating is the user's own 1-10, UNRATED for a skip, or None for
     'decided but not yet scored'."""
     if status not in STATUSES:
@@ -122,7 +172,7 @@ def set_decision(video_id, status, rating=None):
         "status": status,
         "rating": rating,
         "decided_at": date.today().isoformat(),
-    })
+    }, video)
 
 
 def parse_rating(value):
