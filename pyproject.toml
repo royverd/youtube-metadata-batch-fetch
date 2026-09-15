@@ -21,6 +21,7 @@ dependencies = [
     "youtube-transcript-api",
     "requests",
     "pydantic",
+    "customtkinter",
 ]
 
 # Every other provider speaks HTTP through requests. Only Anthropic needs an
@@ -33,9 +34,16 @@ ytb-watchlist = "ytbatch.grab_watchlist:main"
 ytb-fetch = "ytbatch.batch_fetch:main"
 ytb-analyze = "ytbatch.analyze:main"
 ytb-show = "ytbatch.show:main"
+ytb-render = "ytbatch.render:main"
+ytb-render-screening = "ytbatch.render_screening:main"
 
 [project.gui-scripts]
 ytb-gui = "ytbatch.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# render.py reads its page shell from here; without this the wheel ships
+# the module and not the template it cannot run without.
+[tool.setuptools.package-data]
+ytbatch = ["templates/*.html"]

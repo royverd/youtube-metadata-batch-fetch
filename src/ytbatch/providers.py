@@ -354,6 +354,91 @@ def list_models(cfg):
     return names or [f"{provider} listed no usable models"]
 
 
+def _raise_for_status(r, cfg):
+    detail = r.text[:200].replace("\n", " ")
+    if r.status_code in (401, 403):
+        raise FatalProviderError(f"key rejected ({r.status_code}): {detail}")
+    if r.status_code == 404:
+        raise FatalProviderError(f"model {cfg['model']} not found: {detail}")
+    if r.status_code == 429:
+        raise FatalProviderError("rate limited or quota spent - progress is saved")
+    raise ProviderError(f"HTTP {r.status_code}: {detail}")
+
+
+def complete_text(cfg, system, user):
+    """Free-text completion for the screening pass, which wants markdown back,
+    not a VideoDescription. Same error split as the describers: Fatal stops
+    the run, ProviderError costs one batch."""
+    provider = cfg["provider"]
+    if provider == "anthropic":
+        import anthropic as a
+
+        client = a.Anthropic(api_key=cfg["api_key"], max_retries=5)
+        try:
+            # Streamed: a ten-video batch with thinking can outlast the
+            # non-streaming request timeout.
+            with client.messages.stream(
+                model=cfg["model"], max_tokens=64000,
+                output_config={"effort": cfg.get("effort") or "high"},
+                system=[{"type": "text", "text": system,
+                         "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": user}],
+            ) as stream:
+                resp = stream.get_final_message()
+        except a.AuthenticationError as e:
+            raise FatalProviderError("API key rejected") from e
+        except a.NotFoundError as e:
+            raise FatalProviderError(f"model {cfg['model']} unavailable on this key") from e
+        except a.RateLimitError as e:
+            raise FatalProviderError("rate limited past the retry budget") from e
+        except (a.APIStatusError, a.APIConnectionError) as e:
+            raise ProviderError(type(e).__name__) from e
+        text = "".join(b.text for b in resp.content if b.type == "text")
+        if not text:
+            raise ProviderError(f"no text ({resp.stop_reason})")
+        return text
+
+    import requests
+
+    try:
+        if provider == "gemini":
+            r = requests.post(
+                GEMINI_ENDPOINT.format(model=cfg["model"]),
+                headers={"X-goog-api-key": cfg["api_key"]},
+                json={"systemInstruction": {"parts": [{"text": system}]},
+                      "contents": [{"parts": [{"text": user}]}]},
+                timeout=600)
+        elif cfg.get("base_url"):
+            r = requests.post(
+                cfg["base_url"].rstrip("/") + "/chat/completions",
+                headers={"Authorization": f"Bearer {cfg['api_key']}"},
+                json={"model": cfg["model"],
+                      "messages": [{"role": "system", "content": system},
+                                   {"role": "user", "content": user}]},
+                # A local model on consumer hardware can take far longer than
+                # any hosted one on a ten-transcript batch.
+                timeout=3600 if "localhost" in cfg["base_url"] else 600)
+        else:
+            raise FatalProviderError(f"provider {provider!r} has no adapter and no base_url")
+    except requests.ConnectionError as e:
+        # Hosted APIs blip; a refused localhost means the server is not up,
+        # and every remaining batch would fail the same way.
+        if "localhost" in (cfg.get("base_url") or ""):
+            raise FatalProviderError(f"nothing listening at {cfg['base_url']} - start the server") from e
+        raise ProviderError(type(e).__name__) from e
+    except requests.RequestException as e:
+        raise ProviderError(type(e).__name__) from e
+    if r.status_code != 200:
+        _raise_for_status(r, cfg)
+    data = r.json()
+    try:
+        if provider == "gemini":
+            return "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+        return data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise ProviderError("no content in response") from e
+
+
 def make_describer(cfg):
     cls = DESCRIBERS.get(cfg["provider"])
     if cls is None:
