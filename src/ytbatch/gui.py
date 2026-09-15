@@ -48,9 +48,21 @@ import customtkinter as ctk
 from . import (backups, batch_fetch, colorpicker, config, grab_watchlist, guide, paths,
                progress, render_screening, screen, settings, theme)
 
-POLL_MS = 60          # log drain interval; fast enough to look live, cheap enough to ignore
-MAX_LOG_LINES = 5000  # trim from the top beyond this - a long run otherwise grows the widget forever
+def watchlist_digest():
+    """sha256 of watchlist.txt's bytes, or None if unreadable. Run fetch and
+    Fetch watchlist are separate buttons, and pressing only Run fetch reuses
+    the last grab - that is how a whole evening's additions went missing.
+    Comparing against the list the previous run used catches exactly that."""
+    import hashlib
+    try:
+        with open(batch_fetch.INPUT, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
 
+
+POLL_MS = 60         # log drain interval; fast enough to look live, cheap enough to ignore
+MAX_LOG_LINES = 5000  # trim from the top beyond this - a long run otherwise grows the widget forever
 # transcript_pass and fetch both emit "[n/total]" as their first token; parsing
 # it is what drives the progress bar without threading a callback through the
 # pipeline just for the GUI's benefit.
@@ -1319,28 +1331,34 @@ class App:
                 return token
         return None
 
-    def on_fetch_watchlist(self):
-        if self._busy():
-            return
+    def _grab_source(self):
+        """(browser token, playlist url), or None after telling the user why."""
         token = self._selected_browser_token()
         if not token:
             messagebox.showerror("Browser", "Couldn't detect the default browser. Pick one explicitly.")
-            return
+            return None
         playlist = self.playlist_var.get().strip().strip('"').strip("'")
-        if not playlist:
-            playlist = grab_watchlist.DEFAULT_PLAYLIST
+        return token, playlist or grab_watchlist.DEFAULT_PLAYLIST
 
-        def work():
-            print(f"Fetching watchlist from {token}...")
-            ids = grab_watchlist.grab(token, playlist)
-            if not ids:
-                print("No IDs returned. Are you logged in on that browser, and is it fully closed?")
-                return
-            with open(batch_fetch.INPUT, "w", encoding="utf-8") as f:
-                f.write("\n".join(ids) + "\n")
-            print(f"Wrote {len(ids)} unique IDs to {batch_fetch.INPUT}")
+    def _grab(self, token, playlist):
+        """Worker-thread half of Fetch watchlist. False when nothing came back,
+        so a chained fetch doesn't go on to run against the old file."""
+        print(f"Fetching watchlist from {token}...")
+        ids = grab_watchlist.grab(token, playlist)
+        if not ids:
+            print("No IDs returned. Are you logged in on that browser, and is it fully closed?")
+            return False
+        with open(batch_fetch.INPUT, "w", encoding="utf-8") as f:
+            f.write("\n".join(ids) + "\n")
+        print(f"Wrote {len(ids)} unique IDs to {batch_fetch.INPUT}")
+        return True
 
-        self._start(work, "Fetching watchlist...")
+    def on_fetch_watchlist(self):
+        if self._busy():
+            return
+        source = self._grab_source()
+        if source:
+            self._start(lambda: self._grab(*source), "Fetching watchlist...")
 
     def on_run(self):
         if self._busy():
@@ -1348,12 +1366,75 @@ class App:
         if not os.path.isfile(batch_fetch.INPUT):
             messagebox.showerror("No watchlist", "watchlist.txt not found. Fetch the watchlist first.")
             return
+        grab_first = False
+        if watchlist_digest() == self.ui.get("last_run_watchlist"):
+            choice = self._ask_unchanged_watchlist()
+            if choice == "cancel":
+                return
+            grab_first = choice == "fetch"
+        source = self._grab_source() if grab_first else None
+        if grab_first and not source:
+            return
         mode = self.mode_var.get()
 
         def work():
+            if source:
+                # A failed grab (browser open, cookies locked) must not fall
+                # through to fetching the list the user just said was stale.
+                if not self._grab(*source):
+                    return
+                print()
+            # Recorded before the run, not after: a stopped or crashed run
+            # still used this list, and the next press should still warn.
+            self.ui["last_run_watchlist"] = watchlist_digest()
+            self.save_ui()
             batch_fetch.run_pipeline(mode, self.stop_event)
 
         self._start(work, "Fetching metadata and transcripts...")
+
+    def _ask_unchanged_watchlist(self):
+        """Modal: 'fetch', 'continue' or 'cancel'. Closing the window cancels."""
+        win = ctk.CTkToplevel(self.root)
+        win.title("Watchlist unchanged")
+        win.configure(fg_color=self.c("bg"))
+        win.resizable(False, False)
+        win.transient(self.root)
+        choice = {"v": "cancel"}
+
+        def pick(v):
+            choice["v"] = v
+            win.destroy()
+
+        ctk.CTkLabel(
+            win, justify="left", wraplength=460, font=self.fonts["body"],
+            text_color=self.c("fg"),
+            text="watchlist.txt is byte-for-byte the same as the list the last "
+                 "fetch used. The watchlist doesn't seem to have changed - maybe "
+                 "you forgot to fetch it first?",
+        ).pack(padx=20, pady=(20, 14), anchor="w")
+        bar = ctk.CTkFrame(win, fg_color="transparent")
+        bar.pack(fill="x", padx=20, pady=(0, 18))
+        # c() is a (light, dark) pair, and the dark theme's green is pale, so
+        # the label colour is picked per mode rather than fixed white.
+        green = self.c("watch")
+        on_green = tuple("#ffffff" if theme.contrast("#ffffff", g) >= theme.contrast("#000000", g)
+                         else "#000000" for g in green)
+        hover = tuple(theme.mix(g, t, 0.15) for g, t in zip(green, on_green))
+        # Packed right to left: Fetch ends up rightmost.
+        fetch = ctk.CTkButton(bar, text="Fetch", command=lambda: pick("fetch"), height=36,
+                              corner_radius=9, font=self.fonts["body"], fg_color=green,
+                              hover_color=hover, text_color=on_green)
+        fetch.pack(side="right")
+        self.button(bar, "Continue without fetching", lambda: pick("continue")).pack(
+            side="right", padx=(0, 8))
+        self.button(bar, "Cancel", lambda: pick("cancel")).pack(side="right", padx=(0, 8))
+
+        win.protocol("WM_DELETE_WINDOW", lambda: pick("cancel"))
+        win.bind("<Escape>", lambda _e: pick("cancel"))
+        win.bind("<Return>", lambda _e: pick("fetch"))
+        win.after(100, lambda: (win.lift(), fetch.focus_set(), win.grab_set()))
+        self.root.wait_window(win)
+        return choice["v"]
 
     def on_stop(self):
         if self.worker and self.worker.is_alive():
