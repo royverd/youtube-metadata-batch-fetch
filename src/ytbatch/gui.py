@@ -205,6 +205,61 @@ class Stepper(ctk.CTkFrame):
         self.var.set(self.fmt.format(min(max(value, self.lo), self.hi)))
 
 
+class FlowRow(ctk.CTkFrame):
+    """Widgets left to right, wrapping onto a new line when the next one
+    won't fit. pack(side="left") never wraps in Tk, so with a large font or a
+    narrow window the end of a row was simply cut off - Refresh read "fre"
+    and Save lost its first letter.
+
+    Children are created with this frame as parent and handed to add() in
+    order; placement is recomputed whenever the width changes."""
+
+    def __init__(self, parent, gap=10, vgap=8, **kw):
+        super().__init__(parent, fg_color="transparent", height=1, **kw)
+        self.gap, self.vgap = gap, vgap
+        self._items = []
+        self._width = 0
+        self.bind("<Configure>", self._on_configure)
+
+    def add(self, widget, gap=None):
+        self._items.append((widget, self.gap if gap is None else gap))
+        self.after_idle(self._reflow)
+        return widget
+
+    def _on_configure(self, event):
+        if event.width != self._width:
+            self._width = event.width
+            self._reflow()
+
+    def _reflow(self):
+        if not self.winfo_exists():
+            return
+        width = self._width or self.winfo_width()
+        # Two passes: lines first, then placement, so each item can be centred
+        # on its line - top-aligned, a label sat visibly higher than the
+        # buttons beside it.
+        lines, line, x = [], [], 0
+        for widget, gap in self._items:
+            w = widget.winfo_reqwidth()
+            lead = gap if line else 0
+            if line and width > 1 and x + lead + w > width:
+                lines.append(line)
+                line, x, lead = [], 0, 0
+            line.append((widget, x + lead))
+            x += lead + w
+        if line:
+            lines.append(line)
+        y = 0
+        for i, line in enumerate(lines):
+            line_h = max(widget.winfo_reqheight() for widget, _ in line)
+            for widget, left in line:
+                widget.place(x=left, y=y + (line_h - widget.winfo_reqheight()) // 2)
+            y += line_h + (self.vgap if i < len(lines) - 1 else 0)
+        height = y
+        if height and abs(self.winfo_reqheight() - height) > 1:
+            self.configure(height=height)
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -216,6 +271,7 @@ class App:
         self._agent_proc = None       # the screening terminal, while one is open
         self._agent_blocks = False    # whether that process lives as long as its window
         self._agent_gen = 0           # bumped per launch so an older watch stops itself
+        self._progress_state = None   # (done, total) while a run reports progress, else None
         # Every button that must go dead for the duration of a run registers
         # here, rather than being named in both _start and _finished.
         self._action_btns = []
@@ -325,6 +381,7 @@ class App:
                 size=max(8, base + step), weight=weight)
         self._style_tree()
         self.sidebar.configure(width=self._sidebar_width())
+        self._fit_drawer()  # the page's minimum height follows the font size
         self.save_ui()
 
     def _schedule_fonts(self, *_args):
@@ -492,17 +549,26 @@ class App:
 
         main = ctk.CTkFrame(shell, fg_color="transparent")
         main.grid(row=0, column=1, sticky="nsew", padx=28, pady=(22, 16))
-        main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(1, weight=1)
+        # The status bar is packed first, at the bottom: pack hands out space
+        # in order, so it is reserved before the page and drawer take theirs.
+        # As the last grid row it was the first thing clipped when a big font
+        # and a tall drawer outgrew the window - progress and Stop included.
+        self._build_status_bar(main).pack(side="bottom", fill="x", pady=(12, 0))
+        body = self.body = ctk.CTkFrame(main, fg_color="transparent")
+        body.pack(side="top", fill="both", expand=True)
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(1, weight=1)
+        body.bind("<Configure>", self._fit_drawer)
+        self._drawer_h = None
 
-        header = ctk.CTkFrame(main, fg_color="transparent")
+        header = self.header = ctk.CTkFrame(body, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
         self.page_title = self.label(header, "", "h1")
         self.page_title.pack(anchor="w")
         self.page_sub = self.label(header, "", "muted")
         self.page_sub.pack(anchor="w")
 
-        holder = ctk.CTkFrame(main, fg_color="transparent")
+        holder = ctk.CTkFrame(body, fg_color="transparent")
         holder.grid(row=1, column=0, sticky="nsew")
         holder.grid_columnconfigure(0, weight=1)
         holder.grid_rowconfigure(0, weight=1)
@@ -517,13 +583,12 @@ class App:
             page.grid_remove()
 
         # Drag handle for the drawer height; replaces the old paned sash.
-        self.grip = ctk.CTkFrame(main, height=10, fg_color="transparent", cursor="sb_v_double_arrow")
+        self.grip = ctk.CTkFrame(body, height=10, fg_color="transparent", cursor="sb_v_double_arrow")
         self.grip.grid(row=2, column=0, sticky="ew")
         self.grip.bind("<Button-1>", self._grip_start)
         self.grip.bind("<B1-Motion>", self._grip_drag)
-        self.drawer = self._build_log_drawer(main)
+        self.drawer = self._build_log_drawer(body)
         self.drawer.grid(row=3, column=0, sticky="ew")
-        self._build_status_bar(main).grid(row=4, column=0, sticky="ew", pady=(12, 0))
 
         self._set_log_open(self.ui.get("log_open", True), save=False)
         self.show_page(self.ui.get("page") or "fetch")
@@ -591,11 +656,33 @@ class App:
         self.stop_btn = self.button(bar, "Stop", self.on_stop, width=84)
         self.stop_btn.configure(state="disabled")
         self.stop_btn.pack(side="right", padx=8)
+        # Built but not packed: _set_progress shows them only while a run is
+        # actually reporting [n/total].
         self.progress = ctk.CTkProgressBar(bar, width=240, height=8, corner_radius=4,
                                            fg_color=self.c("line"), progress_color=self.c("accent"))
         self.progress.set(0)
-        self.progress.pack(side="right", padx=8)
+        self.progress_lbl = self.label(bar, "", "muted")
+        self._set_progress(self._progress_state)
         return bar
+
+    def _set_progress(self, state):
+        """(done, total) shows the bar with a count beside it; None hides
+        both. Hidden rather than parked at 0: CTkProgressBar still paints its
+        rounded end cap in the accent colour at 0, which read as a run that
+        had started when nothing was running."""
+        self._progress_state = state
+        if not state or not state[1]:
+            self.progress.pack_forget()
+            self.progress_lbl.pack_forget()
+            return
+        done, total = state
+        self.progress.set(min(done / total, 1.0))
+        self.progress_lbl.configure(text=f"{done}/{total}")
+        if not self.progress.winfo_manager():
+            # side="right" packs leftwards, so 'after' the Stop button puts
+            # the bar just left of it and the count just left of the bar.
+            self.progress.pack(side="right", padx=8, after=self.stop_btn)
+            self.progress_lbl.pack(side="right", padx=(8, 0), after=self.progress)
 
     def open_guide(self):
         guide.Guide(self)
@@ -621,8 +708,35 @@ class App:
         for widget in (self.drawer, self.grip):
             widget.grid() if open_ else widget.grid_remove()
         self.log_toggle.configure(text="Hide log" if open_ else "Show log")
+        if open_:
+            self._fit_drawer()
         if save:
             self.save_ui()
+
+    # The page keeps at least this much height; the drawer gives way first.
+    # Scaled by font size: a flat 240 px left the Review table with room for
+    # its headings and no rows once the font was 23.
+    PAGE_MIN_HEIGHT = 240
+
+    def _page_min_height(self):
+        return max(self.PAGE_MIN_HEIGHT, 18 * self.font_size())
+
+    def _fit_drawer(self, _event=None):
+        """Shows the drawer at the saved height or at what's left after the
+        page's minimum, whichever is smaller. The saved height isn't touched,
+        so a bigger window gets the full drawer back. A 690 px drawer with a
+        23 px font used to squeeze the page to nothing in a 900 px window."""
+        body = getattr(self, "body", None)
+        if body is None or not self.ui.get("log_open", True):
+            return
+        body.update_idletasks()
+        chrome = max(0, self.drawer.winfo_reqheight() - self.log.winfo_reqheight())
+        room = (body.winfo_height() - self.header.winfo_reqheight() - 16
+                - self._page_min_height() - self.grip.winfo_reqheight() - chrome)
+        height = max(80, min(int(self.ui.get("log_height") or 180), room))
+        if height != self._drawer_h:
+            self._drawer_h = height
+            self.log.configure(height=height)
 
     def _toggle_log(self):
         self._set_log_open(not self.ui.get("log_open", True))
@@ -632,9 +746,8 @@ class App:
 
     def _grip_drag(self, e):
         # Dragging up grows the drawer, since it sits below the handle.
-        height = max(80, min(700, self._grip_h - (e.y_root - self._grip_y)))
-        self.log.configure(height=height)
-        self.ui["log_height"] = height
+        self.ui["log_height"] = max(80, min(700, self._grip_h - (e.y_root - self._grip_y)))
+        self._fit_drawer()
 
     def _build_fetch_page(self, holder):
         page = ctk.CTkFrame(holder, fg_color="transparent")
@@ -681,15 +794,13 @@ class App:
         body = self.card(page, "Screen with AI")
         self.screen_sub = self.label(body, "", "muted")
         self.screen_sub.pack(anchor="w", pady=(0, 12))
-        row = ctk.CTkFrame(body, fg_color="transparent")
+        row = FlowRow(body, gap=12)
         row.pack(fill="x")
-        self.label(row, "Videos").pack(side="left", padx=(0, 12))
-        Stepper(self, row, self.batch_var, 0, 10000).pack(side="left")
-        self.button(row, "Run", self.on_screen, kind="primary", action=True,
-                    width=110).pack(side="left", padx=12)
-        self.label(row, "0 = everything left, until the limit runs out", "small").pack(side="left")
-        self.button(row, "Open Claude terminal", self.on_claude_terminal,
-                    action=True).pack(side="right")
+        row.add(self.label(row, "Videos"))
+        row.add(Stepper(self, row, self.batch_var, 0, 10000))
+        row.add(self.button(row, "Run", self.on_screen, kind="primary", action=True, width=110))
+        row.add(self.label(row, "0 = everything left, until the limit runs out", "small"))
+        row.add(self.button(row, "Open Claude terminal", self.on_claude_terminal, action=True), gap=24)
 
         body = self.card(page, "Progress")
         self.stat_lbls = {}
@@ -734,12 +845,12 @@ class App:
         page.grid_columnconfigure(0, weight=1)
         page.grid_rowconfigure(1, weight=1)
 
-        bar = ctk.CTkFrame(page, fg_color="transparent")
+        bar = FlowRow(page, gap=18)
         bar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        self.switch(bar, "Hide decided", self.hide_decided, self.refresh_review).pack(side="left")
-        self.label(bar, "Click a heading to sort, again to reverse. Ctrl- or shift-click "
-                        "to pick several.", "small").pack(side="left", padx=18)
-        self.button(bar, "Refresh", self.refresh_review).pack(side="right")
+        bar.add(self.switch(bar, "Hide decided", self.hide_decided, self.refresh_review))
+        bar.add(self.label(bar, "Click a heading to sort, again to reverse. Ctrl- or shift-click "
+                                "to pick several.", "small"))
+        bar.add(self.button(bar, "Refresh", self.refresh_review))
 
         table = ctk.CTkFrame(page, fg_color=self.c("card"), corner_radius=14,
                              border_width=1, border_color=self.c("line"))
@@ -779,17 +890,16 @@ class App:
             self.tree.bind(seq, self.on_select_all)
 
         body = self.card(page, grid=dict(row=2, column=0, sticky="ew", pady=(12, 0)))
-        self.status_seg = self.segmented(body, [name for _, name in STATUSES],
-                                         command=self._on_status_pick)
-        self.status_seg.pack(side="left")
-        self.label(body, "Rating").pack(side="left", padx=(20, 8))
-        Stepper(self, body, self.rating_var, 1, 10, step=0.5, fmt="{:g}",
-                start=float(self.DEFAULT_RATING)).pack(side="left")
-        self.button(body, "Save", self.on_save_decision, kind="primary",
-                    width=96).pack(side="left", padx=(16, 8))
-        self.button(body, "Open video", self.on_open_video).pack(side="left")
-        self.sel_lbl = self.label(body, "", "small")
-        self.sel_lbl.pack(side="right")
+        row = FlowRow(body, gap=12)
+        row.pack(fill="x")
+        self.status_seg = row.add(self.segmented(row, [name for _, name in STATUSES],
+                                                 command=self._on_status_pick))
+        row.add(self.label(row, "Rating"), gap=20)
+        row.add(Stepper(self, row, self.rating_var, 1, 10, step=0.5, fmt="{:g}",
+                        start=float(self.DEFAULT_RATING)), gap=8)
+        row.add(self.button(row, "Save", self.on_save_decision, kind="primary", width=96), gap=16)
+        row.add(self.button(row, "Open video", self.on_open_video), gap=8)
+        self.sel_lbl = row.add(self.label(row, "", "small"), gap=16)
         self._sync_status_seg()
 
         self.review_lbl = self.label(page, "", "small")
@@ -1073,7 +1183,7 @@ class App:
         if m:
             done, total = int(m.group(1)), int(m.group(2))
             if total:
-                self.progress.set(min(done / total, 1.0))
+                self._set_progress((done, total))
 
     def log_line(self, text):
         """Post a GUI-side message through the same path as worker output, so
@@ -1145,7 +1255,8 @@ class App:
         self._log_text.configure(state="normal")
         self._log_text.delete("1.0", "end")
         self._log_text.configure(state="disabled")
-        self.progress.set(0)
+        if not self._run_active:
+            self._set_progress(None)  # a running job keeps its count
 
     def on_open_folder(self):
         # Explorer only on Windows; the fallbacks keep this usable if the
@@ -1568,14 +1679,12 @@ class App:
         self._theme_apply()
         log = self._log_text.get("1.0", "end-1c")
         selection = self._selected_videos()
-        fraction = self.progress.get()
         self.shell.destroy()
-        self._build_widgets()
+        self._build_widgets()  # re-applies self._progress_state
         self._log_text.configure(state="normal")
         self._log_text.insert("1.0", log)
         self._log_text.configure(state="disabled")
         self._log_text.see("end")
-        self.progress.set(fraction)
         self.refresh_watchlist_count()
         self.refresh_screen_counts()
         self.refresh_review()
@@ -1773,7 +1882,7 @@ class App:
 
     def _start(self, work, status):
         self.stop_event.clear()
-        self.progress.set(0)
+        self._set_progress(None)  # appears with the run's first [n/total]
         self.status_var.set(status)
         for btn in self._action_btns:
             btn.configure(state="disabled")
@@ -1816,6 +1925,7 @@ class App:
         for btn in self._action_btns:
             btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
+        self._set_progress(None)
         self.status_var.set("Stopped." if self.stop_event.is_set() else "Done.")
         self.refresh_watchlist_count()
         self.refresh_screen_counts()
