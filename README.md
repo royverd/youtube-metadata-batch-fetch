@@ -73,6 +73,22 @@ ytb-gui
 
 Install `xdg-utils` for default-browser detection. For the colour editor's eyedropper, install PyGObject (`python3-gobject` on Fedora, `python3-gi` on Debian/Ubuntu) and create the venv with `--system-site-packages` so it can see it.
 
+### Arch Linux
+
+Arch's `python` package leaves Tk out, so a missing `tkinter` / `_tkinter` module means the `tk` package isn't installed. System-wide `pip install` is refused, so use a venv:
+
+```bash
+sudo pacman -S python tk git
+git clone <your-remote> youtube-metadata-batch-fetch
+cd youtube-metadata-batch-fetch
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ytb-gui
+```
+
+A `No module named 'ytbatch'` (or `customtkinter`, `yt_dlp`, `pydantic`) error means the command ran outside the venv: activate it first, or run `.venv/bin/ytb-gui`. Optional: `xdg-utils` for default-browser detection, and `python-gobject` for the eyedropper, with the venv created as `python -m venv --system-site-packages .venv` so it can see it.
+
 ### All systems
 
 Editable, and run from the repo root — `data/` and `prompts/` resolve from the working directory, not from wherever pip put the code. `YTBATCH_HOME` overrides that if you want a second corpus against one install.
@@ -100,8 +116,8 @@ Python 3.9+ (`str.removeprefix`), setuptools 77+ to build. Developed and run on 
 ```bash
 ytb-gui                # the desktop app: fetch, screen, review, settings
 ytb-fetch              # stages 1+2: playlist -> data/metadata.json + data/metadata.csv
-ytb-analyze            # stage 3: transcripts -> data/analysis.db
-ytb-show               # stage 4: read what stage 3 wrote
+ytb-analyze            # optional stage 3, CLI only: transcripts -> data/analysis.db
+ytb-show               # optional stage 4, CLI only: read what stage 3 wrote
 ytb-render             # a hand-written screening table -> a browsable HTML page
 ytb-render-screening   # the screener skill's markdown -> a browsable HTML page
 ytb-watchlist          # stage 1 alone
@@ -144,6 +160,8 @@ python -c "from ytbatch import batch_fetch; batch_fetch.run_pipeline('0')"
 ```
 
 ### ytb-analyze and ytb-show
+
+Optional, and command-line only - the app does not use them. They are a separate route from the app's AI screening: stage 3 writes a structured description per video into `data/analysis.db`, while screening writes verdicts to the screening markdown and `data/progress.json`. Neither needs the other. A full stage 3 run against a live provider has not been exercised recently; `ytb-show` on an empty database just says to run `ytb-analyze` first.
 
 Stage 3 takes two flags:
 
