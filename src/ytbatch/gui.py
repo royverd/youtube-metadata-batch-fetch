@@ -1675,7 +1675,8 @@ class App:
         if not (self._reset_paths() and self._reset_ai()):
             return
         self._reset_appearance_state()
-        for key in ("log_open", "log_height", "review_sort", "review_desc", "review_widths"):
+        for key in ("log_open", "log_height", "review_sort", "review_desc", "review_widths",
+                    "guide_geometry"):
             default = settings.DEFAULTS[key]
             self.ui[key] = dict(default) if isinstance(default, dict) else default
         self._sort_col, self._sort_desc = self.ui["review_sort"], self.ui["review_desc"]

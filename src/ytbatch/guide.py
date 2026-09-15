@@ -33,8 +33,11 @@ class Guide:
 
         win = self.win = ctk.CTkToplevel(app.root)
         win.title("ytbatch guide")
-        win.geometry("900x660")
-        win.minsize(780, 580)
+        self._auto_size = self._fit_to_screen()
+        win.geometry(self._centred(app.ui.get("guide_geometry")) or self._auto_size)
+        # Pages scroll vertically only, so the floor is set by the widest row
+        # (the Review demo's status buttons), not by the height.
+        win.minsize(920, 480)
         win.configure(fg_color=app.c("bg"))
         win.transient(app.root)
         win.protocol("WM_DELETE_WINDOW", self.close)
@@ -42,11 +45,18 @@ class Guide:
         win.bind("<Right>", lambda _e: self.go(self.index + 1))
         win.bind("<Escape>", lambda _e: self.close())
 
-        self.body = ctk.CTkFrame(win, fg_color="transparent")
-        self.body.pack(fill="both", expand=True, padx=36, pady=(30, 0))
-
+        # Footer packed first, at the bottom: pack hands out space in order, so
+        # this reserves it before the page takes the rest. Packed after the
+        # body, a short window clipped the buttons off instead of the content.
         footer = ctk.CTkFrame(win, fg_color="transparent", height=60)
-        footer.pack(fill="x", padx=36, pady=(8, 22))
+        footer.pack(side="bottom", fill="x", padx=36, pady=(8, 22))
+
+        # Scrollable, so a page taller than the window scrolls rather than
+        # pushing anything out of reach.
+        self.body = ctk.CTkScrollableFrame(win, fg_color="transparent",
+                                           scrollbar_button_color=app.c("line"),
+                                           scrollbar_button_hover_color=app.c("muted"))
+        self.body.pack(side="top", fill="both", expand=True, padx=(36, 20), pady=(30, 0))
         self.skip_btn = app.button(footer, "Skip guide", self.close, kind="ghost")
         self.skip_btn.pack(side="left")
         self.next_btn = app.button(footer, "Next", lambda: self.go(self.index + 1),
@@ -70,6 +80,7 @@ class Guide:
         for child in self.body.winfo_children():
             child.destroy()
         getattr(self, f"_page_{self.PAGES[self.index]}")()
+        self.body._parent_canvas.yview_moveto(0)  # a new page starts at its top
 
         last = self.index == len(self.PAGES) - 1
         self.back_btn.configure(state="disabled" if self.index == 0 else "normal")
@@ -93,8 +104,41 @@ class Guide:
         # Any way out counts as seen: someone who closes it on page one has
         # decided, and showing it again next launch would be nagging.
         self.app.ui["guide_seen"] = True
+        self._remember_size()
         self.app.save_ui()
         self.win.destroy()
+
+    def _fit_to_screen(self):
+        """Same rule as the main window: a share of the screen, capped, and
+        never below what the pages need to show without scrolling."""
+        root = self.app.root
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        w = min(max(int(sw * 0.55), 900), 1300, sw)
+        h = min(max(int(sh * 0.78), 760), 1100, sh - 60)
+        return f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 3)}"
+
+    def _centred(self, size):
+        """'WxH' -> a geometry string centred on screen, or None if unusable.
+        Only the size is kept: a stored position drifted down by the title
+        bar's height on every reopen, since the WM reports the client origin."""
+        try:
+            w, h = (int(v) for v in (size or "").split("+")[0].split("x"))
+        except ValueError:
+            return None
+        root = self.app.root
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        w, h = min(w, sw), min(h, sh - 60)
+        return f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 3)}"
+
+    def _remember_size(self):
+        """Stored only once it has been resized by hand. Saving the automatic
+        size too would pin it, and the next screen would inherit this one's."""
+        try:
+            now = self.win.geometry().split("+")[0]
+        except Exception:
+            return
+        if now != self._auto_size.split("+")[0]:
+            self.app.ui["guide_geometry"] = now
 
     # ---------- building blocks ----------
 
