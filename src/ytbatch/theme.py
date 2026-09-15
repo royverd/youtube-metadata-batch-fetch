@@ -110,8 +110,11 @@ P = dict(LIGHT)
 
 # First hit wins. Inter for the UI because it was drawn for screens at small
 # sizes; Noto Sans is the Fedora default and always present.
-UI_FONTS = ("Inter", "Cantarell", "Noto Sans", "DejaVu Sans", "Segoe UI")
-MONO_FONTS = ("Hack", "JetBrains Mono", "Noto Sans Mono", "DejaVu Sans Mono", "Consolas")
+# Segoe UI / Consolas cover Windows, Helvetica Neue / Menlo every macOS - none
+# of the Linux faces ship there, and the last entry is used even when missing,
+# which on macOS meant Tk silently substituting whatever it liked.
+UI_FONTS = ("Inter", "Cantarell", "Noto Sans", "DejaVu Sans", "Segoe UI", "Helvetica Neue")
+MONO_FONTS = ("Hack", "JetBrains Mono", "Noto Sans Mono", "DejaVu Sans Mono", "Consolas", "Menlo")
 
 
 def _pick(candidates, available):

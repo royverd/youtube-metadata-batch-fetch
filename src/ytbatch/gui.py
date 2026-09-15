@@ -214,6 +214,8 @@ class App:
         self._run_active = False      # a worker is running and hasn't been finalized yet
         self._overwrite_line = False  # set by a \r, consumed by the next write
         self._agent_proc = None       # the screening terminal, while one is open
+        self._agent_blocks = False    # whether that process lives as long as its window
+        self._agent_gen = 0           # bumped per launch so an older watch stops itself
         # Every button that must go dead for the duration of a run registers
         # here, rather than being named in both _start and _finished.
         self._action_btns = []
@@ -1204,41 +1206,59 @@ class App:
             self._start(work, f"Screening {label} videos via API...")
             return
 
-        if self._agent_proc is not None and self._agent_proc.poll() is None:
+        # Only a blocking launcher can say a session is still open; elsewhere a
+        # second run is allowed and simply takes over the watch.
+        if (self._agent_blocks and self._agent_proc is not None
+                and self._agent_proc.poll() is None):
             messagebox.showinfo("Screen", "A screening terminal is already open.")
             return
         try:
-            proc, ids, out_path, summary = screen.launch_agent(n, cfg)
+            proc, ids, out_path, summary, blocks = screen.launch_agent(n, cfg)
         except screen.ScreenError as e:
             messagebox.showerror("Screen", str(e))
             return
         except OSError as e:
             messagebox.showerror("Screen", f"Couldn't launch the terminal\n{e}")
             return
-        self._agent_proc, self._agent_watch = proc, (ids, out_path)
+        self._agent_gen += 1
+        self._agent_proc, self._agent_watch, self._agent_blocks = proc, (ids, out_path), blocks
+        self._agent_seen = -1
         self.log_line(summary)
         self.status_var.set("Screening in the terminal - results record as they land.")
-        self.root.after(self.AGENT_POLL_MS, self._poll_agent)
+        gen = self._agent_gen
+        self.root.after(self.AGENT_POLL_MS, lambda: self._poll_agent(gen))
 
     AGENT_POLL_MS = 5000
 
-    def _poll_agent(self):
+    def _poll_agent(self, gen):
         """The terminal session can't report back, so the output file is the
         channel: re-parsed on a timer, and once more when the window closes.
-        record_results is idempotent, so re-marking the same ids is harmless."""
+        record_results is idempotent, so re-marking the same ids is harmless.
+
+        Where the launcher exits straight away (Windows, macOS) its process
+        can't mark the end, so the watch runs until every requested video
+        has a verdict, or until a newer run replaces it. A session stopped
+        early therefore keeps a quiet 5-second file read going; cheap, and
+        it still catches verdicts if the session is resumed by hand."""
+        if gen != self._agent_gen:
+            return
         ids, out_path = self._agent_watch
-        done = self._agent_proc.poll() is not None
         try:
             got = screen.record_results(out_path, ids)
         except OSError:
             got = None
-        if got is not None and got != getattr(self, "_agent_seen", -1):
+        if got is not None and got != self._agent_seen:
             self._agent_seen = got
             self.refresh_screen_counts()
+        if self._agent_blocks:
+            done = self._agent_proc.poll() is not None
+        else:
+            done = got == len(ids)
         if not done:
-            self.root.after(self.AGENT_POLL_MS, self._poll_agent)
+            self.root.after(self.AGENT_POLL_MS, lambda: self._poll_agent(gen))
             return
-        self.log_line(f"Screening terminal closed. Recorded {got or 0} of {len(ids)}.")
+        self.log_line((f"Screening terminal closed. Recorded {got or 0} of {len(ids)}."
+                       if self._agent_blocks else f"All {len(ids)} requested videos recorded."))
         self.status_var.set("Idle.")
         self._agent_proc, self._agent_seen = None, -1
         self.refresh_review()
@@ -1247,21 +1267,16 @@ class App:
         """Claude runs in a real terminal emulator rather than in here: tkinter
         has no ANSI or alt-screen handling, and on Wayland there is no XEmbed
         to borrow a real one with."""
-        name, args = screen.find_terminal()
-        if not name:
-            messagebox.showerror("No terminal", "No supported terminal emulator found.\n"
-                                                "Tried: " + ", ".join(t for t, _ in screen.TERMINALS))
-            return
         binary = screen.claude_bin(self.cfg)
         if not binary:
             messagebox.showerror("claude", "claude not found. Set its path in Settings.")
             return
-        cwd = str(paths.home())
-        cmd = [name] + [a.format(cwd=cwd) for a in args] + [binary]
         try:
-            subprocess.Popen(cmd, cwd=cwd, start_new_session=True)
+            screen.open_in_terminal(paths.home(), [binary])
+        except screen.ScreenError as e:
+            messagebox.showerror("No terminal", str(e))
         except OSError as e:
-            messagebox.showerror("Terminal", f"Couldn't launch {name}\n{e}")
+            messagebox.showerror("Terminal", f"Couldn't open a terminal\n{e}")
 
     def on_edit_skill(self):
         """Plain text, no validation. The skill is a prompt, not a config file -

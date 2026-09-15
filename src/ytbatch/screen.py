@@ -23,7 +23,10 @@ Deps: the chosen CLI on PATH (or its path in Settings), or an API key.
 
 import json
 import os
+import shlex
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from . import paths, progress
@@ -142,10 +145,63 @@ def find_browsers():
 
 
 def find_terminal():
+    """Linux/BSD only; Windows and macOS have a standard terminal and are
+    handled in terminal_command."""
     for name, args in TERMINALS:
         if shutil.which(name):
             return name, args
     return None, None
+
+
+def _applescript_string(text):
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def terminal_command(cwd, argv):
+    """(command, blocks, label) that runs argv in a new terminal window at
+    cwd, or None when no terminal is available.
+
+    blocks says whether the launcher process lives as long as the window.
+    Only the Linux emulators do (given the flags in TERMINALS); Windows
+    Terminal, cmd's start and Terminal.app hand the window off and exit at
+    once, so their process says nothing about when the session ends.
+
+    Windows and macOS paths are written from each tool's documented syntax and
+    have not been run on those systems."""
+    cwd = str(cwd)
+    if sys.platform == "win32":
+        # cmd /k runs .exe and npm's .cmd shims alike - CreateProcess can't
+        # start a .cmd directly - and keeps the window open after the CLI exits.
+        inner = ["cmd", "/k"] + list(argv)
+        if shutil.which("wt"):
+            return ["wt", "-d", cwd] + inner, False, "Windows Terminal"
+        # A string, not a list: start takes its first *quoted* argument as the
+        # window title, and list2cmdline only quotes arguments with spaces.
+        return (f'cmd /c start "ytbatch" /D "{cwd}" {subprocess.list2cmdline(inner)}',
+                False, "cmd")
+    if sys.platform == "darwin":
+        line = f"cd {shlex.quote(cwd)} && {shlex.join(argv)}"
+        return (["osascript",
+                 "-e", f'tell application "Terminal" to do script {_applescript_string(line)}',
+                 "-e", 'tell application "Terminal" to activate'], False, "Terminal")
+    name, args = find_terminal()
+    if not name:
+        return None
+    return [name] + [a.format(cwd=cwd) for a in args] + list(argv), True, name
+
+
+def open_in_terminal(cwd, argv):
+    """Returns (process, blocks, label); raises ScreenError if there is no
+    terminal to open."""
+    found = terminal_command(cwd, argv)
+    if found is None:
+        raise ScreenError("No supported terminal emulator found. Tried: "
+                          + ", ".join(t for t, _ in TERMINALS))
+    cmd, blocks, label = found
+    # New session on POSIX so closing the app doesn't take the session with
+    # it; the flag is POSIX-only, and Windows detaches via start/wt anyway.
+    proc = subprocess.Popen(cmd, cwd=str(cwd), start_new_session=os.name != "nt")
+    return proc, blocks, label
 
 
 def skill_path(cfg):
@@ -338,16 +394,13 @@ def _prepare(n, cfg):
 
 def launch_agent(n, cfg):
     """Opens the configured agent CLI in a terminal, working in Untracked/.
-    Returns (process, wanted ids, output path, summary line); the caller owns
-    watching the process and recording results."""
-    import subprocess
-
+    Returns (process, wanted ids, output path, summary line, blocks); the
+    caller owns watching for results. blocks is open_in_terminal's."""
     name = backend(cfg)
     binary = agent_bin(cfg, name)
     if not binary:
         raise ScreenError(f"{name} not found on PATH. Set its path in Settings.")
-    term, targs = find_terminal()
-    if not term:
+    if terminal_command(".", ["true"]) is None:
         raise ScreenError("No supported terminal emulator found. Tried: "
                           + ", ".join(t for t, _ in TERMINALS))
 
@@ -359,14 +412,19 @@ def launch_agent(n, cfg):
 
     out_dir = os.path.dirname(os.path.abspath(out_path))
     add_dirs = [] if Path(out_dir).resolve() == cwd.resolve() else [out_dir]
-    prompt = build_agent_prompt(files, len(batch), staged, out_path, cwd)
-    argv = AGENTS[name][1](binary, prompt, cfg.get("screen_agent_model", "").strip(),
+    prompt_file = staged.parent / "PROMPT.md"
+    prompt_file.write_text(build_agent_prompt(files, len(batch), staged, out_path, cwd),
+                           encoding="utf-8")
+    # The session is handed a one-line pointer, not the prompt: a multi-line
+    # argument full of quotes survives a POSIX exec, but not cmd.exe's or
+    # AppleScript's quoting on its way into a new window.
+    kickoff = f"Read {os.path.relpath(prompt_file, cwd)} and follow it exactly."
+    argv = AGENTS[name][1](binary, kickoff, cfg.get("screen_agent_model", "").strip(),
                            cfg.get("screen_agent_effort", "").strip(), add_dirs)
-    cmd = [term] + [a.format(cwd=cwd) for a in targs] + argv
-    proc = subprocess.Popen(cmd, cwd=str(cwd), start_new_session=True)
+    proc, blocks, label = open_in_terminal(cwd, argv)
     summary = (f"{name} screening {len(batch)} of {len(corpus)} videos in "
-               f"{len(files)} batch(es), in {cwd}")
-    return proc, {rec["id"] for _, rec in batch}, out_path, summary
+               f"{len(files)} batch(es), in {cwd} ({label})")
+    return proc, {rec["id"] for _, rec in batch}, out_path, summary, blocks
 
 
 def run_api(n, cfg, stop_event=None):
