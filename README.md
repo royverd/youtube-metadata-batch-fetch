@@ -12,6 +12,57 @@ cd youtube-metadata-batch-fetch
 pip install -e .
 ```
 
+That is the whole install where Python, tkinter and pip already work. Per system:
+
+### Windows
+
+Install Python from [python.org](https://www.python.org/downloads/) and tick **Add python.exe to PATH**; the installer includes tkinter by default. Then, in PowerShell:
+
+```powershell
+git clone <your-remote> youtube-metadata-batch-fetch
+cd youtube-metadata-batch-fetch
+py -m pip install -e .
+py -m ytbatch.gui
+```
+
+If pip warns that its `Scripts` folder is not on PATH, the `ytb-*` commands and `yt-dlp` won't be found; add that folder to PATH, or keep using `py -m ytbatch.<module>` and `py -m yt_dlp`. Subscription screening opens Windows Terminal (standard on Windows 11), or a plain `cmd` window where it isn't installed.
+
+### macOS
+
+Homebrew's Python ships without tkinter and refuses a system-wide `pip install`, so install tkinter alongside it and use a virtual environment:
+
+```bash
+brew install python python-tk git
+git clone <your-remote> youtube-metadata-batch-fetch
+cd youtube-metadata-batch-fetch
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ytb-gui
+```
+
+The python.org installer includes tkinter, if you'd rather use that. Run `source .venv/bin/activate` in each new shell before the `ytb-*` commands. Reading Chrome's cookies triggers a Keychain prompt; allow it. Subscription screening opens Terminal.app, and the first time macOS asks whether the app's Python may control Terminal — allow that too.
+
+### Linux
+
+tkinter is a separate system package, and newer Debian/Ubuntu refuse a system-wide `pip install`, so use a virtual environment there:
+
+```bash
+sudo dnf install python3-tkinter            # Fedora
+sudo apt install python3-tk python3-venv    # Debian / Ubuntu
+
+git clone <your-remote> youtube-metadata-batch-fetch
+cd youtube-metadata-batch-fetch
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ytb-gui
+```
+
+Install `xdg-utils` for default-browser detection. For the colour editor's eyedropper, install PyGObject (`python3-gobject` on Fedora, `python3-gi` on Debian/Ubuntu) and create the venv with `--system-site-packages` so it can see it.
+
+### All systems
+
 Editable, and run from the repo root — `data/` and `prompts/` resolve from the working directory, not from wherever pip put the code. `YTBATCH_HOME` overrides that if you want a second corpus against one install.
 
 Add the Anthropic SDK only if you intend to use that provider; every other provider goes over plain `requests`:
@@ -27,10 +78,10 @@ Python 3.9+ (`str.removeprefix`), setuptools 77+ to build. Developed and run on 
 - **yt-dlp** comes with the install above, which is the point of listing it — both fetch stages shell out to the binary rather than importing it, so what matters is that it lands on PATH.
 - **tkinter**, for `ytb-gui`. It ships with Python on Windows and macOS; on Linux it is a system package (`python3-tkinter` on Fedora, `python3-tk` on Debian/Ubuntu). CustomTkinter, which the app is built on, comes with the install above.
 - **A browser you're logged into YouTube on, fully closed.** Stage 1 reads its cookie database directly; a running browser holds a lock on it.
-- **For screening, either an AI CLI or an API key.** Subscription mode runs `claude`, `codex`, `gemini` or `opencode` in a terminal emulator (konsole, gnome-terminal, alacritty, kitty, foot or xterm, first found). API mode and stage 3 use a provider from [`src/ytbatch/config.py`](src/ytbatch/config.py), ordered cheapest-first; Ollama and LM Studio run locally with no key.
+- **For screening, either an AI CLI or an API key.** Subscription mode runs `claude`, `codex`, `gemini` or `opencode` in a new terminal window: Windows Terminal or `cmd` on Windows, Terminal.app on macOS, and on Linux the first of konsole, gnome-terminal, alacritty, kitty, foot or xterm. API mode and stage 3 use a provider from [`src/ytbatch/config.py`](src/ytbatch/config.py), ordered cheapest-first; Ollama and LM Studio run locally with no key.
 - **The screener skill**, `.claude/skills/youtube-video-screener/SKILL.md`, found by walking up from the corpus folder, or set its path in Settings. It is the screening prompt and is not part of this repo.
-- **PyGObject**, optional, for the colour editor's eyedropper. It reads a screen pixel through the XDG desktop portal, which is the only way to on Wayland. Fedora's system Python has it; without it the button says so.
-- **Cross-platform, with soft edges.** Default-browser detection (menu option `0` in stage 1) reads the registry on Windows and shells out to `xdg-settings` elsewhere; without `xdg-utils` it falls through to the numbered browser menu. Subscription screening's terminal launch is Linux-only as written. Developed on Windows and Fedora KDE (Wayland).
+- **PyGObject**, optional and Linux-only, for the colour editor's eyedropper. It reads a screen pixel through the XDG desktop portal, which is the only way to on Wayland. Without it — including on Windows and macOS — the button says so and the rest of the editor works.
+- **Cross-platform, with soft edges.** Default-browser detection (option `0` in stage 1, System default in the app) reads the registry on Windows and `xdg-settings` on Linux; on macOS, and on Linux without `xdg-utils`, pick the browser explicitly. The fetch stages were developed on Windows; the app and screening were developed on Fedora KDE (Wayland) and have not been run on Windows or macOS.
 
 ## Usage
 
@@ -59,7 +110,7 @@ A sidebar with four pages and a log drawer shared by all of them. The **?** at t
 
 Screening runs one of two ways, switched in Settings → Screening AI:
 
-- **Subscription** opens an interactive CLI session in a terminal, working in `Untracked/`. The batch is cut out of `metadata.json` into small files in `Untracked/screen_batches/` first, so the model never opens the 20 MB corpus. With `0` it works through the whole backlog until the usage limit stops it. The app re-reads the output every 5 seconds and records verdicts as they land.
+- **Subscription** opens an interactive CLI session in a terminal, working in `Untracked/`. The batch is cut out of `metadata.json` into small files in `Untracked/screen_batches/` first, so the model never opens the 20 MB corpus, and the session is pointed at a `PROMPT.md` written beside them. With `0` it works through the whole backlog until the usage limit stops it. The app re-reads the output every 5 seconds and records verdicts as they land — until the window closes on Linux, and until every requested video has a verdict on Windows and macOS, where the app can't tell when the window closes.
 - **API** sends one request per batch to the chosen provider and appends the result itself. It stops at the first fatal error — a rejected key, a missing model, or a spent quota — keeping everything already recorded.
 
 Appearance changes apply as you make them: light/dark, a colour editor with a picker, an eyedropper and presets (Nord, Dracula, Gruvbox, Solarized, Catppuccin, Discord, OBS and others, plus your own), font family and size.
@@ -186,7 +237,7 @@ archive/                the pre-metadata transcript fetcher, kept for reference
 | `data/free_proxies.json` | stage 2 | Proxy pool with per-proxy status and measured latency. Gitignored |
 | `data/proxies.txt` | you | Optional manual proxy list. Gitignored |
 | `Untracked/screening.md` | the screening AI | One `<details>` block per video; `data/screening.md` if `Untracked/` has none |
-| `Untracked/screen_batches/` | the app | Per-batch slices of the corpus and a copy of the skill, rewritten each run |
+| `Untracked/screen_batches/` | the app | Per-batch slices of the corpus, a copy of the skill and the session's `PROMPT.md`, rewritten each run |
 
 ## Limitations
 
@@ -194,7 +245,7 @@ archive/                the pre-metadata transcript fetcher, kept for reference
 - **The metadata fetch has no proxy support.** Only transcripts route through the pool. When yt-dlp hits the bot gate it fails, and those videos land in `data/failures.csv` with the reason — 5 of 67 in the last run, all `Sign in to confirm you're not a bot`. Passing cookies to that call would fix it and currently isn't wired up.
 - **Free proxies are mostly dead.** The pool is public lists; a run can walk dozens of entries without one answering. Mode 1 or 2 is the reliable path.
 - **A block lasts hours to a day.** Stage 2 stops rather than grinding through it — waiting it out mid-run doesn't work. Re-run after it clears, or switch modes.
-- **Only the claude CLI has been run for screening.** The codex, gemini and opencode launch flags come from their documentation and have not been exercised here.
+- **Only the claude CLI has been run for screening, and only on Linux.** The codex, gemini and opencode flags, and the Windows Terminal, `cmd` and Terminal.app launches, are built from each tool's documented syntax and have not been exercised.
 - **Local models truncate silently.** Ollama's default context is far shorter than a batch of transcripts. Raise it (`OLLAMA_CONTEXT_LENGTH`, or the context setting in LM Studio) and lower Videos per batch, or the verdicts are made on cut transcripts with no error.
 - **Videos without a usable transcript are skipped entirely** by stage 3. Whether they should get a degraded description from metadata alone is still open.
 - **Length verdicts and padding estimates come from the transcript only.** No frames are analyzed, so the `on_screen` field is the model's guess at how much substance it can't see.
