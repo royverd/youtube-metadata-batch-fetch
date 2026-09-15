@@ -9,10 +9,22 @@ Each stage is resumable and writes its own file. A rate-limit, a crash, or Ctrl-
 ```bash
 git clone <your-remote> youtube-metadata-batch-fetch
 cd youtube-metadata-batch-fetch
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-That is the whole install where Python, tkinter and pip already work. Per system:
+That is the whole install where Python and tkinter are already present. Activate the venv (`source .venv/bin/activate`) in each new shell before running any `ytb-*` command, or call them directly as `.venv/bin/ytb-gui`.
+
+The venv is not optional on most current systems. Installing into the system Python fails with:
+
+```
+error: externally-managed-environment
+```
+
+That is the OS (Debian/Ubuntu, Homebrew on macOS, Arch, and others) protecting the Python its own tools depend on, per PEP 668. A venv sidesteps it; `--break-system-packages` also silences it, but can break OS tools, so don't.
+
+Per system:
 
 ### Windows
 
