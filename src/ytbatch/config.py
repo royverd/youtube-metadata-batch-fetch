@@ -170,6 +170,32 @@ PROVIDERS = {
             ("gemma-4-31b", "Gemma 4 31B  - preview"),
         ],
     },
+    # ---- local, no key ----
+    # Both speak the OpenAI shape on localhost. Models are whatever is pulled
+    # or loaded locally, so there is no fallback list - the live listing is
+    # the only answer.
+    "ollama": {
+        "label": "Ollama - LOCAL, free; raise the context length or transcripts get cut",
+        "key_url": "https://ollama.com/download",
+        "key_hint": "",
+        "env": "OLLAMA_API_KEY",
+        "local": True,
+        "base_url": "http://localhost:11434/v1",
+        "default_model": "",
+        "has_effort": False,
+        "models": [],
+    },
+    "lmstudio": {
+        "label": "LM Studio - LOCAL, free; start the server in the Developer tab",
+        "key_url": "https://lmstudio.ai/",
+        "key_hint": "",
+        "env": "LMSTUDIO_API_KEY",
+        "local": True,
+        "base_url": "http://localhost:1234/v1",
+        "default_model": "",
+        "has_effort": False,
+        "models": [],
+    },
     "anthropic": {
         "label": "Anthropic - PAID; a Claude subscription does not cover this",
         "key_url": "https://console.anthropic.com/settings/keys",
@@ -201,6 +227,19 @@ DEFAULTS = {
     "claude_bin": "",
     "browser": "",
     "screening_md": "",
+    # Screening: "subscription" runs screen_agent (screen.AGENTS) in a
+    # terminal, "api" calls screen_provider (PROVIDERS). Each mode keeps its
+    # own model and effort so flipping between them loses neither. Blank
+    # model/effort = the backend's default.
+    "screen_mode": "subscription",
+    "screen_agent": "claude",
+    "screen_agent_model": "",
+    "screen_agent_effort": "",
+    "screen_bins": {},
+    "screen_provider": "",
+    "screen_api_model": "",
+    "screen_api_effort": "",
+    "screen_batch": 10,
 }
 
 
@@ -215,7 +254,7 @@ def load():
             cfg.update({k: v for k, v in stored.items() if k in DEFAULTS})
         except (json.JSONDecodeError, OSError):
             print(f"  {os.path.basename(CONFIG_PATH)} unreadable - starting from defaults.")
-    for k in ("keys", "models", "extras"):
+    for k in ("keys", "models", "extras", "screen_bins"):
         cfg.setdefault(k, {})
     return cfg
 
@@ -323,6 +362,32 @@ def choose_effort(current):
         print(f"  Enter one of: {', '.join(EFFORT_LEVELS)}")
 
 
+def runtime(cfg, provider, model="", effort=""):
+    """resolve() without the prompting, for callers that already have their
+    choices (the GUI). Missing key comes back empty rather than asked for."""
+    if provider not in PROVIDERS:
+        provider = DEFAULT_PROVIDER
+    spec = PROVIDERS[provider]
+    key = os.environ.get(spec["env"], "").strip() or cfg.get("keys", {}).get(provider, "")
+    extras = dict(cfg.get("extras", {}).get(provider, {}))
+    for name, _label, env_var in spec.get("needs", []):
+        extras[name] = os.environ.get(env_var, "").strip() or extras.get(name, "")
+    base_url = spec.get("base_url")
+    if not base_url and spec.get("base_url_template"):
+        try:
+            base_url = spec["base_url_template"].format(**extras)
+        except KeyError:
+            base_url = None
+    return {
+        "provider": provider,
+        "api_key": key,
+        "model": model or cfg.get("models", {}).get(provider) or spec["default_model"],
+        "base_url": base_url,
+        "rpm": spec.get("rpm"),
+        "effort": (effort or cfg.get("effort", DEFAULT_EFFORT)) if spec["has_effort"] else "n/a",
+    }
+
+
 def resolve(force_prompt=False):
     """Returns a flat, ready-to-use config for the selected provider, prompting
     only for what is actually missing.
@@ -348,7 +413,9 @@ def resolve(force_prompt=False):
 
     env_key = os.environ.get(spec["env"], "").strip()
     key = env_key or cfg["keys"].get(provider, "")
-    if not key or force_prompt:
+    if spec.get("local"):
+        pass  # a local server takes any key, including none
+    elif not key or force_prompt:
         key = prompt_api_key(provider, key)
         cfg["keys"][provider] = key
         dirty = True
