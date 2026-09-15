@@ -1556,7 +1556,7 @@ class App:
 
         def work():
             page, total, tally = render_screening.build(
-                open(md, encoding="utf-8").read())
+                open(md, encoding="utf-8").read(), render_screening.corpus_positions())
             out = os.path.splitext(md)[0] + ".html"
             _atomic_write(out, page)
             print(f"\n{out}  {total} videos  "

@@ -135,7 +135,20 @@ def preamble(text):
     return "\n".join(out)
 
 
-def build(md_text):
+def corpus_positions():
+    """{id: current watchlist position}, "—" for archived. None when the
+    corpus can't be read, so the render still works off the stored numbers."""
+    from . import screen
+    try:
+        return {rec["id"]: pos or "—" for pos, rec in screen.load_corpus()}
+    except (OSError, ValueError):
+        return None
+
+
+def build(md_text, positions=None):
+    """positions: {id: number} from corpus_positions(). A block's stored n:
+    is only what its position was when it was screened, so any block carrying
+    an id is renumbered from the live list; the stored n: is the fallback."""
     blocks = BLOCK.findall(md_text)
     if not blocks:
         raise SystemExit("No <details> blocks found.")
@@ -143,11 +156,15 @@ def build(md_text):
     m0 = START.search(md_text)
     first = int(m0.group(1)) if m0 else 1
 
-    cards, tally = [], {"watch": 0, "read": 0, "skip": 0}
+    cards, anchors, tally = [], set(), {"watch": 0, "read": 0, "skip": 0}
     for n, block in enumerate(blocks, first):
         mn = NUM.search(block)
         if mn:
             n = mn.group(1)
+        mv = VID.search(block)
+        if positions is not None and mv:
+            # Not in metadata.json at all reads the same as archived.
+            n = positions.get(mv.group(1), "—")
         m = SUMMARY.search(block)
         if not m:
             raise SystemExit(f"Block {n} has no <summary> line.")
@@ -158,7 +175,9 @@ def build(md_text):
                              f"Expected one starting with Watch, Read or Skip.")
         tally[slug] += 1
         # Removed entries share the "—" label, so anchors fall back to an index.
-        anchor = n if str(n).isdigit() else f"x{len(cards) + 1}"
+        # A video screened twice gets the same number on both cards.
+        anchor = n if str(n).isdigit() and n not in anchors else f"x{len(cards) + 1}"
+        anchors.add(anchor)
         cards.append((n, CARD.format(
             slug=slug, n=n, anchor=anchor, verdict=html.escape(verdict),
             title=inline(title), channel=inline(channel), gist=inline(gist),
@@ -355,7 +374,7 @@ def main():
     out = Path(args[1]) if len(args) > 1 else src.with_suffix(".html")
 
     print(f"render_screening - {src}\n")
-    page, total, tally = build(src.read_text(encoding="utf-8"))
+    page, total, tally = build(src.read_text(encoding="utf-8"), corpus_positions())
     out.write_text(page, encoding="utf-8")
     print(f"\n{out}  {total} videos  "
           f"watch {tally['watch']} / read {tally['read']} / skip {tally['skip']}")
