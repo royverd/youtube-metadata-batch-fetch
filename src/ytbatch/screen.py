@@ -478,6 +478,11 @@ def run_api(n, cfg, stop_event=None):
             continue
         with open(out_path, "a", encoding="utf-8") as f:
             f.write("\n\n" + text.strip() + "\n")
+        try:
+            from . import backups
+            backups.snapshot(out_path)
+        except OSError as e:
+            print(f"  backup copy of {os.path.basename(out_path)} failed: {e}")
         got = record_results(out_path, {rec["id"] for _, rec in chunk})
         recorded += got
         print(f"  recorded {got}/{len(chunk)}")

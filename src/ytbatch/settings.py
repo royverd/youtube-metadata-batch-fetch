@@ -37,6 +37,7 @@ DEFAULTS = {
     "font_family": "",    # empty = first of theme.UI_FONTS that is installed
     "font_size": 14,      # body text in pixels; headings and hints scale from it
     "guide_seen": False,  # the guide opens by itself until it has been closed once
+    "backup_threshold": 15,  # notify once any file has more read-only copies than this
     "guide_geometry": "", # empty = sized to the screen; set once resized by hand
     "review_sort": "num",
     "review_desc": False,

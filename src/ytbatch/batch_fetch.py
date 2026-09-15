@@ -809,6 +809,12 @@ def write_json(records, path, allow_shrink=False):
         if os.path.isfile(path):
             shutil.copy2(path, path + ".bak")
         os.replace(tmp, path)
+        if os.path.abspath(path) == os.path.abspath(JSON_OUT):
+            try:
+                from . import backups
+                backups.snapshot(path)
+            except OSError as e:
+                print(f"  backup copy of {os.path.basename(path)} failed: {e}")
     except BaseException:
         try:
             os.unlink(tmp)

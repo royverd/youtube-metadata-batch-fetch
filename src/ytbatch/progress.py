@@ -79,6 +79,11 @@ def save(data):
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, PATH)
+        try:
+            from . import backups
+            backups.snapshot(PATH)  # skips itself when nothing changed
+        except OSError as e:
+            print(f"  backup copy of progress.json failed: {e}")
     except BaseException:
         # Includes KeyboardInterrupt on purpose: leaving a stray .progress-*
         # beside the real file is worse than the interrupt itself.

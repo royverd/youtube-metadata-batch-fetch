@@ -45,8 +45,8 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from . import (batch_fetch, colorpicker, config, grab_watchlist, guide, paths, progress,
-               render_screening, screen, settings, theme)
+from . import (backups, batch_fetch, colorpicker, config, grab_watchlist, guide, paths,
+               progress, render_screening, screen, settings, theme)
 
 POLL_MS = 60          # log drain interval; fast enough to look live, cheap enough to ignore
 MAX_LOG_LINES = 5000  # trim from the top beyond this - a long run otherwise grows the widget forever
@@ -310,6 +310,12 @@ class App:
         self.refresh_screen_counts()
         self.refresh_review()
         self._banner()
+        # Catches changes made while the app was closed - an AI CLI session
+        # run by hand, or a file edited directly.
+        made = backups.snapshot_all(self.cfg)
+        if made:
+            self.log_line(f"backups  {len(made)} new read-only copy(ies) in {backups.DIR}")
+        self._refresh_backup_note()
         if not self.ui.get("guide_seen"):
             # Deferred so the main window is up behind it rather than after it.
             self.root.after(700, self.open_guide)
@@ -534,6 +540,9 @@ class App:
         self.font_family_var = tk.StringVar(value=self.ui.get("font_family") or "Default")
         self.font_size_var = tk.StringVar(value=str(self.font_size()))
         self.font_size_var.trace_add("write", self._schedule_fonts)
+        self.backup_threshold_var = tk.StringVar(
+            value=str(self.ui.get("backup_threshold") or backups.DEFAULT_THRESHOLD))
+        self.backup_threshold_var.trace_add("write", self._on_backup_threshold)
 
     # ---------- layout ----------
 
@@ -625,7 +634,93 @@ class App:
         self.side_theme.set(self.ui["theme"].capitalize())
         self.side_theme.pack(side="bottom", fill="x", padx=14, pady=(4, 16))
         self.label(side, "Theme", "small").pack(side="bottom", anchor="w", padx=16)
+
+        # Shown only when some file's backups pass the threshold; opens the
+        # Backups card in Settings.
+        self.backup_note = ctk.CTkButton(side, text="", anchor="w", height=34, corner_radius=9,
+                                         font=self.fonts["small"], fg_color=self.c("sel"),
+                                         hover_color=self.c("line"), text_color=self.c("skip"),
+                                         command=lambda: self.show_page("settings"))
         return side
+
+    def _refresh_backup_note(self):
+        """Sidebar notice and Settings rows from the current copy counts.
+        Cheap: a directory listing, no hashing."""
+        if not hasattr(self, "backup_note") or not self.backup_note.winfo_exists():
+            return
+        try:
+            info = backups.status(self.cfg)
+        except OSError:
+            return
+        limit = self.backup_threshold()
+        over = [s for s in info if s["count"] > limit]
+        if over:
+            names = ", ".join(f"{s['label']} ({s['count']})" for s in over)
+            self.backup_note.configure(text=f"⚠  Backups over {limit}: {names}")
+            if not self.backup_note.winfo_manager():
+                self.backup_note.pack(side="bottom", fill="x", padx=14, pady=(0, 10))
+        else:
+            self.backup_note.pack_forget()
+        rows = getattr(self, "backup_rows", None)
+        if rows is not None and rows.winfo_exists():
+            for child in rows.winfo_children():
+                child.destroy()
+            for s in info:
+                newest = s["newest"].strftime("%Y-%m-%d %H:%M") if s["newest"] else "none yet"
+                text = (f"{s['label']}:  {s['count']} cop{'y' if s['count'] == 1 else 'ies'}  ·  "
+                        f"{s['bytes'] / 1_048_576:.1f} MB  ·  newest {newest}")
+                self.label(rows, text, text_color=self.c("skip" if s["count"] > limit else "fg")
+                           ).pack(anchor="w", pady=2)
+
+    def backup_threshold(self):
+        try:
+            return max(1, int(self.ui.get("backup_threshold") or backups.DEFAULT_THRESHOLD))
+        except (TypeError, ValueError):
+            return backups.DEFAULT_THRESHOLD
+
+    def _on_backup_threshold(self, *_args):
+        try:
+            value = max(1, int(float(self.backup_threshold_var.get())))
+        except ValueError:
+            return
+        if value != self.backup_threshold():
+            self.ui["backup_threshold"] = value
+            self.save_ui()
+            self._refresh_backup_note()
+
+    def on_clear_backups(self):
+        info = backups.status(self.cfg)
+        extra = sum(max(0, s["count"] - 1) for s in info)
+        if not extra:
+            messagebox.showinfo("Backups", "Only the newest copy of each file exists - nothing to clear.")
+            return
+        size = sum(s["bytes"] for s in info) / 1_048_576
+        if not messagebox.askokcancel(
+                "Clear old backups",
+                f"Delete {extra} older read-only copies?\n\n"
+                f"The newest copy of each file is kept. Backups currently use {size:.1f} MB."):
+            return
+        try:
+            removed, freed = backups.clear_old(self.cfg)
+        except OSError as e:
+            messagebox.showerror("Backups", f"Couldn't clear all copies\n{e}")
+            removed, freed = 0, 0
+        self.log_line(f"Cleared {removed} old backup copies ({freed / 1_048_576:.1f} MB); "
+                      f"newest of each kept.")
+        self._refresh_backup_note()
+
+    def on_open_backups(self):
+        backups.DIR.mkdir(parents=True, exist_ok=True)
+        folder = str(backups.DIR)
+        try:
+            if sys.platform == "win32":
+                os.startfile(folder)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception as e:
+            messagebox.showerror("Open folder", f"Couldn't open {folder}\n{e}")
 
     def _build_log_drawer(self, parent):
         drawer = ctk.CTkFrame(parent, fg_color=self.c("card"), corner_radius=14,
@@ -972,6 +1067,21 @@ class App:
         Stepper(self, row, self.font_size_var, self.FONT_MIN, self.FONT_MAX).pack(side="left")
         self.label(row, "Body text in pixels; headings scale with it.",
                    "small").pack(side="left", padx=12)
+
+        body = self.card(page, "Backups",
+                         "Read-only copies of metadata.json, progress.json and the screening "
+                         "markdown, taken whenever one changes. Nothing deletes them except "
+                         "Clear old copies, which keeps the newest of each.", padx=(0, 8))
+        self.backup_rows = ctk.CTkFrame(body, fg_color="transparent")
+        self.backup_rows.pack(fill="x")
+        row = FlowRow(body, gap=12)
+        row.pack(fill="x", pady=(12, 0))
+        row.add(self.button(row, "Clear old copies", self.on_clear_backups))
+        row.add(self.button(row, "Open backups folder", self.on_open_backups))
+        row.add(self.label(row, "Notify above"), gap=24)
+        row.add(Stepper(self, row, self.backup_threshold_var, 1, 999))
+        row.add(self.label(row, "copies of any one file", "small"))
+        self._refresh_backup_note()
 
         row = ctk.CTkFrame(page, fg_color="transparent")
         row.pack(fill="x", pady=(0, 8), padx=(0, 8))
@@ -1355,6 +1465,10 @@ class App:
             return
         ids, out_path = self._agent_watch
         try:
+            # The AI CLI writes the screening file, not the app, so this poll
+            # is where its changes get their read-only copy.
+            if backups.snapshot(out_path):
+                self._refresh_backup_note()
             got = screen.record_results(out_path, ids)
         except OSError:
             got = None
@@ -1534,6 +1648,7 @@ class App:
                  f"watched {s['watched_full']} / scrubbed {s['scrubbed']} / "
                  f"read {s['read_summary']} / skipped {s['skipped']}  -  "
                  f"mean rating {mean} over {s['rated']}")
+        self._refresh_backup_note()  # a saved decision may have added a progress.json copy
 
     def on_sort_column(self, col):
         """Second click on the same heading reverses; a new column starts
@@ -1926,6 +2041,7 @@ class App:
             btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
         self._set_progress(None)
+        self._refresh_backup_note()
         self.status_var.set("Stopped." if self.stop_event.is_set() else "Done.")
         self.refresh_watchlist_count()
         self.refresh_screen_counts()
