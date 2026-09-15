@@ -81,6 +81,13 @@ FREE_PROXY_REFRESH_MINUTES = 30
 # responds would hang forever instead of failing fast. FREE_PROXY_TIMEOUT is
 # injected via TimeoutSession specifically for mode 2, where most candidates
 # are expected to be dead and need to fail fast so rotation can move on.
+# A proxy that has fetched a transcript gets this many failures before it is
+# written off, and a written-off one that had worked is tried again after the
+# cooldown. One strike was permanent before: all 13 proxies that ever worked
+# ended up marked failed and were never offered again. Untested proxies stay
+# one-strike - most on the free lists are dead on arrival.
+PROXY_OK_STRIKES = 3
+PROXY_RETRY_HOURS = 24
 FREE_PROXY_TIMEOUT = 8
 
 # yt-dlp's full dump is ~99% download plumbing (formats, automatic_captions,
@@ -372,8 +379,20 @@ def load_free_proxy_pool(path):
 
 
 def save_free_proxy_pool(pool_data, path):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(pool_data, f, indent=2)
+    """Atomic, like the corpus: a truncated pool file loads as empty and
+    throws away every latency and strike count learned so far."""
+    d = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".free_proxies-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(pool_data, f, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def fetch_proxyscrape_urls():
@@ -419,9 +438,15 @@ def refresh_free_proxy_pool(path):
     caching much longer would mean re-trying proxies that died hours ago, but
     re-fetching on every single re-run of a resumed batch would be wasteful.
 
-    Newly-seen proxies are appended as 'untested'. Proxies we've already
-    proven 'ok' or 'failed' keep that status rather than being reset - the
-    whole point is not re-trying something we already know is dead."""
+    Newly-seen proxies are added as 'untested'. Proxies already proven 'ok'
+    or 'failed' keep that status rather than being reset.
+
+    The download's own order is kept as pool_data["latest"]: proxyscrape's
+    alive, TLS-capable list sorted by its measured latency, then proxifly.
+    build_pool tries untested proxies in that order and skips any no longer
+    listed. Before, untested proxies were tried in the order first seen, so
+    leftovers from earlier downloads and the unfiltered fallback list came
+    first - the best-ranked live proxy sat around position 600 of 12,000."""
     pool_data = load_free_proxy_pool(path)
     last = pool_data.get("last_refreshed")
     stale = last is None or (
@@ -438,6 +463,10 @@ def refresh_free_proxy_pool(path):
         if u not in proxies:
             proxies[u] = {"status": "untested"}
             added += 1
+    if fresh_urls:
+        # An empty download (both sites down) keeps the previous order rather
+        # than marking every proxy as no longer listed.
+        pool_data["latest"] = fresh_urls
     pool_data["last_refreshed"] = datetime.now().isoformat()
     save_free_proxy_pool(pool_data, path)
     print(f"  {len(fresh_urls)} seen, {added} new, {len(proxies) - added} already known.")
@@ -450,19 +479,36 @@ def record_pool_results(pool, pool_data, path):
     that worked is marked 'ok' (plus the latency of that successful fetch, so
     build_pool can try the fastest known-good proxies first next time - no
     separate speed-check pass needed, it's just the real fetch's own timing).
-    No-op for modes 0/1 (keys are all None there, nothing to persist)."""
+    No-op for modes 0/1 (keys are all None there, nothing to persist).
+
+    A proxy with a recorded latency has worked before and gets
+    PROXY_OK_STRIKES failures before it is marked failed; an untested one is
+    marked failed on its first. failed_at starts the retry cooldown.
+    Successes are applied after failures, so a proxy that both failed and
+    worked this run ends up ok with its strikes cleared."""
     proxies = pool_data.setdefault("proxies", {})
+    now = datetime.now().isoformat()
     changed = False
     for key in pool.failed_keys:
-        if key in proxies:
-            proxies[key]["status"] = "failed"
-            changed = True
+        info = proxies.get(key)
+        if info is None:
+            continue
+        proven = "latency_ms" in info
+        info["fails"] = info.get("fails", 0) + 1
+        if not proven or info["fails"] >= PROXY_OK_STRIKES:
+            info["status"] = "failed"
+            info["failed_at"] = now
+        changed = True
     for key in pool.ok_keys:
-        if key in proxies:
-            proxies[key]["status"] = "ok"
-            if key in pool.latencies:
-                proxies[key]["latency_ms"] = round(pool.latencies[key] * 1000)
-            changed = True
+        info = proxies.get(key)
+        if info is None:
+            continue
+        info["status"] = "ok"
+        info["fails"] = 0
+        info.pop("failed_at", None)
+        if key in pool.latencies:
+            info["latency_ms"] = round(pool.latencies[key] * 1000)
+        changed = True
     if changed:
         save_free_proxy_pool(pool_data, path)
 
@@ -520,17 +566,42 @@ def build_pool(mode):
         # never anything already proven 'failed'. Latency comes from the real
         # fetch that already succeeded last time - no separate speed check.
         # Manual entries always count, on the assumption you added them on purpose.
-        ok = sorted((u for u, info in free_proxies.items() if info.get("status") == "ok"),
-                    key=lambda u: free_proxies[u].get("latency_ms", float("inf")))
-        untested = [u for u, info in free_proxies.items() if info.get("status") == "untested"]
-        urls = list(dict.fromkeys(manual_urls + ok + untested))
+        # Order, most likely to work first: proxies that have worked, fastest
+        # first; ones that worked before and have sat out the cooldown; then
+        # untested ones in the latest download's order (proxyscrape's alive
+        # list by latency, then proxifly). Untested proxies no longer listed
+        # are skipped, not deleted - they return if a list carries them again.
+        latency = lambda u: free_proxies[u].get("latency_ms", float("inf"))
+        ok = sorted((u for u, info in free_proxies.items() if info.get("status") == "ok"), key=latency)
+        cutoff = datetime.now() - timedelta(hours=PROXY_RETRY_HOURS)
+
+        def cooled_down(info):
+            try:
+                return datetime.fromisoformat(info["failed_at"]) <= cutoff
+            except (KeyError, TypeError, ValueError):
+                return True  # proven, then failed before failed_at existed
+
+        retry = sorted((u for u, info in free_proxies.items()
+                        if info.get("status") == "failed" and "latency_ms" in info and cooled_down(info)),
+                       key=latency)
+        latest = pool_data.get("latest")
+        if latest is None:
+            # A pool file from before "latest" existed: no download order to
+            # use yet, so fall back to what's on file until the next refresh.
+            latest = list(free_proxies)
+        untested = [u for u in dict.fromkeys(latest)
+                    if free_proxies.get(u, {}).get("status") == "untested"]
+        stale = sum(1 for info in free_proxies.values() if info.get("status") == "untested") - len(untested)
+        urls = list(dict.fromkeys(manual_urls + ok + retry + untested))
         if urls:
             proxy_apis = [YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=u, https_url=u),
                                                 http_client=TimeoutSession(FREE_PROXY_TIMEOUT))
                           for u in urls]
             proxy_labels = [f"proxy {i + 1}/{len(urls)}" for i in range(len(urls))]
-            print(f"  Pool: {len(manual_urls)} manual + {len(ok)} known-good + {len(untested)} "
-                  f"untested free proxies ({len(free_proxies) - len(ok) - len(untested)} known-bad skipped).")
+            known_bad = sum(1 for info in free_proxies.values() if info.get("status") == "failed") - len(retry)
+            print(f"  Pool: {len(manual_urls)} manual + {len(ok)} known-good + {len(retry)} retrying "
+                  f"after cooldown + {len(untested)} untested from the latest lists "
+                  f"({stale} no longer listed, {known_bad} known-bad skipped).")
             p = ApiPool([direct_api] + proxy_apis, [direct_label] + proxy_labels,
                         keys=[None] + urls, is_direct=[True] + [False] * len(urls))
             p.pool_data, p.pool_data_path = pool_data, FREE_PROXIES_FILE  # so main() can persist results after
