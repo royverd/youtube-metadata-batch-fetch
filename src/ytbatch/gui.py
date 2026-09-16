@@ -1786,9 +1786,9 @@ class App:
             seg.set(dict(STATUSES).get(self.status_choice.get(), ""))
 
     def _on_status_change(self, *_args):
-        """Skipping and scoring are mutually exclusive - a skipped video was
-        never watched. Without this the midpoint default would quietly record
-        a 5 for every skip."""
+        """Skipping and scoring are mutually exclusive - a skip stopped at
+        the takeaway, so there is no video to score. Without this the midpoint
+        default would quietly record a 5 for every skip."""
         self._sync_status_seg()
         if self.status_choice.get() == "skipped":
             self.rating_var.set(progress.UNRATED)

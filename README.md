@@ -135,7 +135,7 @@ A sidebar with four pages and a log drawer shared by all of them. The **?** at t
 |---|---|
 | Fetch | Stages 1 and 2: pick a browser and playlist, choose transcript routing, run. Stop lands mid-delay rather than after the current wait. |
 | Screen | Has an AI screen the next N unscreened videos against the screener skill. `0` means everything left. Shows screened/left/verdict counts, edits the skill, renders the results to HTML. |
-| Review | One row per screened video. Record what you did (watched in full, scrubbed, read the summary, skipped) and a 1-10 rating to one decimal, for one row or a multi-selection. Double-click opens the video. |
+| Review | One row per screened video. Record how far past the takeaway you went (skipped: takeaway only; read the summary; scrubbed; watched in full) and a 1-10 rating of the video to one decimal (none for skips; only a full watch fully backs one), for one row or a multi-selection. Double-click opens the video. |
 | Settings | Paths, the screening AI, appearance. Each panel has Reset to defaults, plus one reset for everything. |
 
 Screening runs one of two ways, switched in Settings → Screening AI:

@@ -32,8 +32,11 @@ from . import paths
 
 PATH = paths.data_file("progress.json")
 
-# scrubbed is the honest middle: segments watched, neither committed to nor
-# written off. It is a decision, so it counts as decided.
+# Every status starts from the takeaway, which is always read; they differ in
+# what came after it. skipped: nothing. read_summary: the rest of the write-up.
+# scrubbed: parts of the video. watched_full: the whole video. The rating is of
+# the video, so only watched_full rests on direct evidence - read_summary trusts
+# the summary to have delivered, scrubbed extrapolates from segments.
 STATUSES = ("skipped", "scrubbed", "watched_full", "read_summary")
 
 # Ratings carry one decimal place. Whole numbers are stored as ints so the
@@ -45,9 +48,9 @@ RATING_PLACES = 1
 # can compare what the model said against what the user actually did.
 VERDICTS = ("watch", "read", "skip")
 
-# A skipped video was never watched, so a 1-10 score would be a lie. It still
-# has to read as "dealt with" though, since that is what the Review tab filters
-# on, so it gets a sentinel instead of an empty cell.
+# A skip stopped at the takeaway, so a 1-10 score of the video has nothing to
+# verify it against. It still has to read as "dealt with" though, since that is
+# what the Review tab filters on, so it gets a sentinel instead of an empty cell.
 UNRATED = "-"
 
 
