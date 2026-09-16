@@ -393,6 +393,14 @@ def _prepare(n, cfg):
     return skill, screening_path(cfg), corpus, batch
 
 
+def batches_phrase(count, size, total):
+    """'10 batches of up to 10' - a bare count reads as the batch size. 'up to'
+    only when the last batch really is short."""
+    unit = "batch" if count == 1 else "batches"
+    cap = f"up to {size}" if total % size else str(size)
+    return f"{count} {unit} of {min(size, total) if count == 1 else cap}"
+
+
 def launch_agent(n, cfg):
     """Opens the configured agent CLI in a terminal, working in Untracked/.
     Returns (process, wanted ids, output path, summary line, blocks); the
@@ -424,7 +432,7 @@ def launch_agent(n, cfg):
                            cfg.get("screen_agent_effort", "").strip(), add_dirs)
     proc, blocks, label = open_in_terminal(cwd, argv)
     summary = (f"{name} screening {len(batch)} of {len(corpus)} videos in "
-               f"{len(files)} batch(es), in {cwd} ({label})")
+               f"{batches_phrase(len(files), batch_size(cfg), len(batch))}, in {cwd} ({label})")
     return proc, {rec["id"] for _, rec in batch}, out_path, summary, blocks
 
 
@@ -456,7 +464,7 @@ def run_api(n, cfg, stop_event=None):
     system = build_api_prompt(Path(skill).read_text(encoding="utf-8"))
     chunks = [batch[i:i + size] for i in range(0, len(batch), size)]
     print(f"Screening {len(batch)} of {len(corpus)} videos via {pcfg['provider']} "
-          f"{pcfg['model']}, {len(chunks)} batch(es)")
+          f"{pcfg['model']}, {batches_phrase(len(chunks), size, len(batch))}")
     print(f"  output  {out_path}\n")
 
     recorded = 0
