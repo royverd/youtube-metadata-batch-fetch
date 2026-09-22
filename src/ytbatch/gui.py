@@ -1477,10 +1477,12 @@ class App:
 
     def refresh_screen_counts(self):
         try:
-            total = len(screen.load_corpus(queued_only=True))
+            corpus = screen.load_corpus(queued_only=True)
         except (OSError, ValueError):
-            total = None
-        s = progress.summary(total)
+            corpus = None
+        total = None if corpus is None else len(corpus)
+        queued_ids = None if corpus is None else [rec["id"] for _pos, rec in corpus]
+        s = progress.summary(total, queued_ids)
         values = {"screened": s["screened"], "left": "?" if s["left"] is None else s["left"],
                   "watch": s["verdict_watch"], "read": s["verdict_read"],
                   "skip": s["verdict_skip"], "decided": s["decided"], "rated": s["rated"]}

@@ -207,14 +207,30 @@ def screened_ids():
     return {vid for vid, e in load().items() if e.get("ai_verdict")}
 
 
-def summary(total=None):
+def summary(total=None, queued_ids=None):
     """Counts for the status line. total is the corpus size when the caller
-    knows it - progress.json only knows about videos it has seen."""
+    knows it - progress.json only knows about videos it has seen.
+
+    queued_ids is the ids still in the watchlist, and it is what makes "left"
+    mean anything. screened counts every verdict ever reached, archive
+    included; total counts only the queue. Subtracting one from the other is
+    two different populations, so a corpus with more archived screenings than
+    unscreened videos reported 0 left while the queue was not empty - and
+    max() dressed the negative up as a plausible zero. Given the ids, "left"
+    is the set difference instead, which is exactly what the Screen button
+    will work through."""
     data = load()
-    screened = sum(1 for e in data.values() if e.get("ai_verdict"))
+    done = {vid for vid, e in data.items() if e.get("ai_verdict")}
+    screened = len(done)
+    if queued_ids is not None:
+        left = len(set(queued_ids) - done)
+    elif total is None:
+        left = None
+    else:
+        left = max(0, total - screened)
     out = {
         "screened": screened,
-        "left": None if total is None else max(0, total - screened),
+        "left": left,
         "decided": sum(1 for e in data.values() if e.get("status")),
         "rated": sum(1 for e in data.values() if is_rating(e.get("rating"))),
     }
