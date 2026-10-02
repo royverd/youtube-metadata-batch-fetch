@@ -293,6 +293,8 @@ class App:
         if self.ui.get("theme") not in theme.PALETTES:
             self.ui["theme"] = "light"
         ctk.set_appearance_mode(self.ui["theme"])
+        # Before any widget exists: scaling is read at construction time.
+        self._apply_scale()
         self._theme_apply()
         self._load_palettes()
         self._make_fonts()
@@ -357,10 +359,38 @@ class App:
         except (TypeError, ValueError):
             return 14
 
+    SCALE_MIN, SCALE_MAX, SCALE_STEP = 50, 250, 10
+
+    def ui_scale(self):
+        try:
+            value = int(float(self.ui.get("ui_scale") or 100))
+        except (TypeError, ValueError):
+            return 100
+        return min(max(value, self.SCALE_MIN), self.SCALE_MAX)
+
+    def _apply_scale(self):
+        """CustomTkinter multiplies its own scaling by whatever DPI factor it
+        detects, which is the wrong basis for a stored preference: the same
+        setting would mean different sizes on two machines, and on a display
+        the process is not DPI-aware for it compounds with the stretching the
+        OS is already doing - a 100px button drew at 200px inside a logically
+        half-size screen, so the window needed four times the room it had.
+
+        Turning the automatic factor off makes this number absolute. 100 is
+        the size the widgets were authored at, on any screen."""
+        ctk.deactivate_automatic_dpi_awareness()
+        factor = self.ui_scale() / 100
+        ctk.set_widget_scaling(factor)
+        ctk.set_window_scaling(factor)
+
     def _theme_apply(self):
+        # ttk and the named Tk fonts are outside CustomTkinter's scaling, so
+        # the Review table and menus need the factor applied by hand or they
+        # stay put while every CTk widget around them moves.
+        size = max(1, round(self.font_size() * self.ui_scale() / 100))
         self.ui_font, self.mono_font = theme.apply(
             self.root, self.ui["theme"], self.ui.get("colors"), paint_root=False,
-            font_family=self.ui.get("font_family") or "", font_size=self.font_size())
+            font_family=self.ui.get("font_family") or "", font_size=size)
 
     def _make_fonts(self):
         base = self.font_size()
@@ -407,6 +437,31 @@ class App:
         if getattr(self, "_font_job", None):
             self.root.after_cancel(self._font_job)
         self._font_job = self.root.after(350, self.apply_fonts)
+
+    def apply_scale(self):
+        try:
+            value = int(float(self.scale_var.get()))
+        except ValueError:
+            return  # emptied mid-edit; wait for a number
+        clamped = min(max(value, self.SCALE_MIN), self.SCALE_MAX)
+        if clamped != value:
+            self.scale_var.set(str(clamped))
+        if clamped == self.ui_scale():
+            return
+        self.ui["ui_scale"] = clamped
+        self._apply_scale()
+        # CustomTkinter resizes its own widgets from the callback above; this
+        # is for everything it does not own.
+        self._theme_apply()
+        self._style_tree()
+        self.sidebar.configure(width=self._sidebar_width())
+        self._fit_drawer()
+        self.save_ui()
+
+    def _schedule_scale(self, *_args):
+        if getattr(self, "_scale_job", None):
+            self.root.after_cancel(self._scale_job)
+        self._scale_job = self.root.after(350, self.apply_scale)
 
     def _sidebar_width(self):
         # Fixed width (pack_propagate off keeps it from jittering per page),
@@ -552,6 +607,8 @@ class App:
         self.font_family_var = tk.StringVar(value=self.ui.get("font_family") or "Default")
         self.font_size_var = tk.StringVar(value=str(self.font_size()))
         self.font_size_var.trace_add("write", self._schedule_fonts)
+        self.scale_var = tk.StringVar(value=str(self.ui_scale()))
+        self.scale_var.trace_add("write", self._schedule_scale)
         self.backup_threshold_var = tk.StringVar(
             value=str(self.ui.get("backup_threshold") or backups.DEFAULT_THRESHOLD))
         self.backup_threshold_var.trace_add("write", self._on_backup_threshold)
@@ -1079,6 +1136,15 @@ class App:
         Stepper(self, row, self.font_size_var, self.FONT_MIN, self.FONT_MAX).pack(side="left")
         self.label(row, "Body text in pixels; headings scale with it.",
                    "small").pack(side="left", padx=12)
+
+        row = FlowRow(body, gap=12)
+        row.pack(fill="x", pady=(14, 0))
+        row.add(self.label(row, "Interface scale"))
+        row.add(Stepper(self, row, self.scale_var, self.SCALE_MIN, self.SCALE_MAX,
+                        step=self.SCALE_STEP, start=100))
+        row.add(self.label(row, "Percent of the authored size, the same on every display. "
+                                "Raise it on a HiDPI screen; lower it if the window "
+                                "won't fit.", "small"))
 
         body = self.card(page, "Backups",
                          "Read-only copies of metadata.json, progress.json and the screening "
@@ -1917,7 +1983,8 @@ class App:
     AI_KEYS = ("screen_mode", "screen_agent", "screen_agent_model", "screen_agent_effort",
                "screen_bins", "screen_provider", "screen_api_model", "screen_api_effort",
                "screen_batch")
-    APPEARANCE_KEYS = ("theme", "fullscreen", "colors", "font_family", "font_size")
+    APPEARANCE_KEYS = ("theme", "fullscreen", "colors", "font_family", "font_size",
+                       "ui_scale")
 
     def _confirm_reset(self, what):
         return messagebox.askokcancel(
@@ -1975,9 +2042,11 @@ class App:
             self.ui[key] = dict(default) if isinstance(default, dict) else default
         self.font_family_var.set("Default")
         self.font_size_var.set(str(self.font_size()))
+        self.scale_var.set(str(self.ui_scale()))
         self.root.attributes("-fullscreen", False)
         self.fullscreen_var.set(False)
         ctk.set_appearance_mode(self.ui["theme"])
+        self._apply_scale()
         self._theme_apply()
         for kind, (step, weight) in self.FONT_STEPS.items():
             self.fonts[kind].configure(
