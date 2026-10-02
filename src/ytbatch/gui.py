@@ -1535,9 +1535,9 @@ class App:
     AGENT_POLL_MS = 5000
 
     def _poll_agent(self, gen):
-        """The terminal session can't report back, so the output file is the
-        channel: re-parsed on a timer, and once more when the window closes.
-        record_results is idempotent, so re-marking the same ids is harmless.
+        """The terminal session can't report back, so its output files are the
+        channel: collected on a timer, and once more when the window closes.
+        ingest is idempotent, so a pass that finds nothing new is harmless.
 
         Where the launcher exits straight away (Windows, macOS) its process
         can't mark the end, so the watch runs until every requested video
@@ -1548,12 +1548,16 @@ class App:
             return
         ids, out_path = self._agent_watch
         try:
-            # The AI CLI writes the screening file, not the app, so this poll
-            # is where its changes get their read-only copy.
+            got = screen.ingest(out_path, ids)
+            # After, so the read-only copy includes what this pass appended.
             if backups.snapshot(out_path):
                 self._refresh_backup_note()
-            got = screen.record_results(out_path, ids)
-        except OSError:
+        except (OSError, ValueError) as e:
+            # ValueError covers an output file that isn't UTF-8. The next pass
+            # retries; say so once rather than every five seconds.
+            if str(e) != getattr(self, "_ingest_err", None):
+                self._ingest_err = str(e)
+                self.log_line(f"screen  couldn't collect output: {e}")
             got = None
         if got is not None and got != self._agent_seen:
             self._agent_seen = got

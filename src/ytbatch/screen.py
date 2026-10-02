@@ -10,6 +10,8 @@ Two ways to run a screen, picked by screen_mode in config.json:
   agent CLI  (claude, codex, gemini, opencode) - an interactive session opens
              in a real terminal, working in Untracked/. You can watch it,
              steer it, or let it run into the subscription's usage limit.
+             It writes one output file per batch; the app moves the blocks
+             into the screening file itself (see ingest).
   api        one of config.PROVIDERS, called directly; the app appends the
              returned markdown itself. Stops at the first fatal provider
              error, which is what a spent quota looks like.
@@ -304,9 +306,9 @@ def write_batches(batch, size):
     """Cuts the batch into Untracked/screen_batches/batch_NNN.json. Old files
     are cleared first: a leftover batch_014 from a longer previous run would
     otherwise be picked up as part of this one."""
-    d = work_dir() / "screen_batches"
-    d.mkdir(exist_ok=True)
-    for old in d.glob("batch_*.json"):
+    d = stage_dir()
+    # Output files go too - launch_agent has already ingested what they held.
+    for old in [*d.glob("batch_*.json"), *d.glob("batch_*.md")]:
         old.unlink()
     files = []
     for i in range(0, len(batch), size):
@@ -318,10 +320,21 @@ def write_batches(batch, size):
     return files
 
 
+def stage_dir():
+    d = work_dir() / "screen_batches"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def output_name(batch_file):
+    """batch_001.json -> batch_001.md: where the agent writes that batch."""
+    return Path(batch_file).with_suffix(".md").name
+
+
 def _stage_skill(skill):
     """A copy inside the working directory, so no CLI needs permission to read
     above it. Taken at launch, which is when the original would be read anyway."""
-    dst = work_dir() / "screen_batches" / "SKILL.md"
+    dst = stage_dir() / "SKILL.md"
     shutil.copyfile(skill, dst)
     return dst
 
@@ -342,7 +355,13 @@ BLOCK_RULES = [
 ]
 
 
-def build_agent_prompt(files, total, skill, out_path, cwd):
+def build_agent_prompt(files, total, skill, cwd):
+    """The agent is never pointed at the screening file. On 2026-09-22 a
+    session told to append to it used a whole-file write instead and replaced
+    695 write-ups with 9, while reporting that it had appended. An instruction
+    was all that stood in the way, so the file is now out of the agent's job
+    entirely: each batch goes to a fresh file of its own, where a whole-file
+    write is the right tool and overwrites nothing, and ingest() appends."""
     rel = lambda p: os.path.relpath(p, cwd)
     lines = [
         f"Read {rel(skill)} in full and follow it exactly. It is the single source "
@@ -350,14 +369,17 @@ def build_agent_prompt(files, total, skill, out_path, cwd):
         "substitute your own structure or abbreviate it.",
         "",
         f"There are {total} videos to screen, split across {len(files)} batch file(s). "
-        "Each file is a JSON list of records, already in screening order:",
+        "Each file is a JSON list of records, already in screening order. Next to "
+        "each is the output file its blocks go in:",
         "",
-        *[f"  {rel(p)}" for p in files],
+        *[f"  {rel(p)}  ->  {rel(Path(p).with_suffix('.md'))}" for p in files],
         "",
         "Work through the files in that order. For each file: read it once, screen "
-        f"every video in it, then append its blocks to {rel(out_path)} before "
-        "opening the next file. Never re-read a finished file, and leave everything "
-        "already in the output untouched.",
+        "every video in it, then write all of its blocks to its output file in one "
+        "go, before opening the next file. Each output file is new; create it. "
+        "Never re-read a finished file. Apart from the files named above, do not "
+        "read, write or modify anything - screening.md least of all; the app "
+        "collects the output files itself.",
         "",
         *BLOCK_RULES,
         "",
@@ -413,23 +435,27 @@ def launch_agent(n, cfg):
         raise ScreenError("No supported terminal emulator found. Tried: "
                           + ", ".join(t for t, _ in TERMINALS))
 
+    # A previous session's output may never have been collected - the app
+    # closed mid-run, or the session was resumed by hand. Collect it before
+    # write_batches clears the directory, and before _prepare decides what is
+    # left, so those videos are neither lost nor screened twice.
+    ingest(screening_path(cfg))
     skill, out_path, corpus, batch = _prepare(n, cfg)
     cwd = work_dir()
     files = write_batches(batch, batch_size(cfg))
     staged = _stage_skill(skill)
-    Path(out_path).touch()
 
-    out_dir = os.path.dirname(os.path.abspath(out_path))
-    add_dirs = [] if Path(out_dir).resolve() == cwd.resolve() else [out_dir]
     prompt_file = staged.parent / "PROMPT.md"
-    prompt_file.write_text(build_agent_prompt(files, len(batch), staged, out_path, cwd),
+    prompt_file.write_text(build_agent_prompt(files, len(batch), staged, cwd),
                            encoding="utf-8")
     # The session is handed a one-line pointer, not the prompt: a multi-line
     # argument full of quotes survives a POSIX exec, but not cmd.exe's or
     # AppleScript's quoting on its way into a new window.
     kickoff = f"Read {os.path.relpath(prompt_file, cwd)} and follow it exactly."
+    # No extra directories: everything the session needs is in screen_batches/,
+    # and the screening file, wherever it lives, is not its business.
     argv = AGENTS[name][1](binary, kickoff, cfg.get("screen_agent_model", "").strip(),
-                           cfg.get("screen_agent_effort", "").strip(), add_dirs)
+                           cfg.get("screen_agent_effort", "").strip(), [])
     proc, blocks, label = open_in_terminal(cwd, argv)
     summary = (f"{name} screening {len(batch)} of {len(corpus)} videos in "
                f"{batches_phrase(len(files), batch_size(cfg), len(batch))}, in {cwd} ({label})")
@@ -541,6 +567,48 @@ def record_results(md_path, wanted_ids=None):
             "webpage_url": f"https://www.youtube.com/watch?v={vid}"})
         count += 1
     return count
+
+
+# Ids of blocks in the agent's output that have no id comment, already
+# reported. Such a block can't be deduplicated, so it is never moved.
+_NO_ID_WARNED = set()
+
+
+def ingest(md_path, wanted_ids=None):
+    """Moves finished blocks from the agent's per-batch output files into the
+    screening file, then records verdicts. Returns what record_results does.
+
+    Only the app writes the screening file, and only by appending. A block
+    goes across once: anything whose id is already in the file is skipped,
+    so the 5-second poll can run this as often as it likes. Blocks are
+    matched up to their closing tag, so a file caught mid-write gives up only
+    its complete blocks and the rest arrive on a later pass."""
+    from . import render_screening as rs
+
+    have = set()
+    if os.path.isfile(md_path):
+        have = set(rs.VID.findall(Path(md_path).read_text(encoding="utf-8")))
+    new = []
+    for f in sorted(stage_dir().glob("batch_*.md")):
+        # utf-8-sig: a BOM from a Windows editor or shell must not end up
+        # glued to the first <details>.
+        for m in rs.BLOCK.finditer(f.read_text(encoding="utf-8-sig")):
+            block = m.group(0)
+            mid = rs.VID.search(block)
+            if not mid:
+                key = (f.name, block[:80])
+                if key not in _NO_ID_WARNED:
+                    _NO_ID_WARNED.add(key)
+                    print(f"  {f.name}: a block without an id comment - not moved.")
+                continue
+            if mid.group(1) in have:
+                continue
+            have.add(mid.group(1))
+            new.append(block)
+    if new:
+        with open(md_path, "a", encoding="utf-8") as fh:
+            fh.write("\n" + "\n\n".join(new) + "\n")
+    return record_results(md_path, wanted_ids)
 
 
 # YouTube titles carry typographic quotes and dashes; the write-ups were typed
