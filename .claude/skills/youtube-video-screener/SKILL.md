@@ -23,6 +23,10 @@ Write it last, from the finished bullets, even though it's presented first. Deri
 
 It appears twice by design: clipped to a phrase in the collapsed line so the file scans, then in full as the body's opening line.
 
+**Gist** — straight after the takeaway, one or two sentences in bold: the summarizing thought, what the reader should carry away from it. The takeaway reports what the video concludes; the gist says what that amounts to — how far the conclusion actually holds given the confidence of what it rests on, and what it means for someone deciding whether to act on it or spend the runtime. It must add something the takeaway didn't, or it's a repeat in bold; if the two would say the same thing, make the takeaway plainer and let the gist carry the judgement.
+
+Written last, from the graded essence, like the takeaway. No label: the whole line is wrapped in one `**...**`, with no other bold inside it.
+
 **What it is** — a sentence or two describing the setup, then format and runtime. Who is in it and what they are (host and channel, guest and why they're there), what they're actually doing for the runtime, and the shape it takes. The reader should be able to picture the video from this alone.
 
 A label triplet is not enough. "Project vlog, two hosts, 21:43" tells you nothing; "Linus and a colleague run Ethernet through an entire house on camera, working out room by room what needs a drop and hitting the termination problems as they go — project vlog, 21:43" is the same length and actually describes something.
@@ -37,7 +41,16 @@ Judge from the transcript's content, not the title's framing; titles overclaim. 
 - anything genuinely novel or counter-intuitive, even in passing
 - jokes and asides that carry a real claim. A crack about a company's habitual behaviour, pinned to a specific incident, is an argument delivered as a joke — keep the claim and the incident it rests on, and keep the phrasing where the phrasing is what makes the point land. The test is whether it still says something once stated plainly: if yes it's content, if it evaporates it was a bit, cut it. Keeping it because it was funny is the failure mode; so is stripping it because it was funny.
 
-Cut the rest outright rather than condensing it: intros, outros, sponsor reads, repetition, hedging, meta-talk about the video, examples that add nothing beyond the claim they illustrate. Lead with the conclusion; keep the video's original order only where sequence is load-bearing (a procedure, a proof, a story whose steps depend on each other).
+Cut the rest outright rather than condensing it: intros, outros, sponsor reads, repetition, hedging, meta-talk about the video, examples that add nothing beyond the claim they illustrate.
+
+Every bullet opens with a confidence tag, graded on how well the video supports it — not on how confident the speaker sounds, and not on whether you happen to believe it:
+- **[Established]** — shown or backed in the video: demonstrated on screen, measured, sourced or cited, or a matter of plain record.
+- **[Unconfirmed]** — asserted as fact, but resting on the speaker's word: no evidence shown, no source given, or a single anecdote standing in for a pattern.
+- **[Speculation]** — a prediction, opinion, or guess, whether the speaker frames it as one or states it with more certainty than anything in the video earns.
+
+Sort the bullets by tier, Established first, then Unconfirmed, then Speculation. Within a tier, the most important first, so the conclusion leads its tier. Where sequence is load-bearing (a procedure, a proof, a story whose steps depend on each other), those bullets keep the video's order inside their tier.
+
+Grade the claim the bullet makes, not the topic it's about: a sourced number and the speaker's guess at what it means are two bullets in two tiers. The tags grade the video's own content — your synthesis has no tier and no place in the essence. Don't drift to the middle: a video that demonstrates everything is all Established, and a pundit's monologue can be all Speculation; uniform Unconfirmed is a hedge, not a grade.
 
 If the transcript is padded, the write-up compresses that padding away instead of mirroring it. If it's thin, garbled, or mostly noise, say that plainly rather than manufacturing something that reads more substantial than the source.
 
@@ -70,10 +83,14 @@ One collapsible block per video, so the file scans top-to-bottom closed and open
 
 **Takeaway:** in full, as long as the point needs
 
+**The summarizing thought, one or two sentences, entirely in bold.**
+
 **What it is:** a sentence or two on who's in it and what they're doing, then format and runtime
 
 **The essence:**
-- ...
+- **[Established]** ...
+- **[Unconfirmed]** ...
+- **[Speculation]** ...
 
 **What you get, what you don't:** what it hands over and at what level; what its framing set up and didn't deliver → grade
 
