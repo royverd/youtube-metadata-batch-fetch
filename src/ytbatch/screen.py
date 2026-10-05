@@ -582,13 +582,18 @@ def ingest(md_path, wanted_ids=None):
     goes across once: anything whose id is already in the file is skipped,
     so the 5-second poll can run this as often as it likes. Blocks are
     matched up to their closing tag, so a file caught mid-write gives up only
-    its complete blocks and the rest arrive on a later pass."""
+    its complete blocks and the rest arrive on a later pass.
+
+    With no wanted_ids (the sweep before a launch) only the blocks this pass
+    moved are recorded. Recording the whole file instead costs one
+    progress.json rewrite per block on the GUI thread - 786 blocks froze the
+    window for most of a minute on every Screen click."""
     from . import render_screening as rs
 
     have = set()
     if os.path.isfile(md_path):
         have = set(rs.VID.findall(Path(md_path).read_text(encoding="utf-8")))
-    new = []
+    new, moved = [], set()
     for f in sorted(stage_dir().glob("batch_*.md")):
         # utf-8-sig: a BOM from a Windows editor or shell must not end up
         # glued to the first <details>.
@@ -604,10 +609,13 @@ def ingest(md_path, wanted_ids=None):
             if mid.group(1) in have:
                 continue
             have.add(mid.group(1))
+            moved.add(mid.group(1))
             new.append(block)
     if new:
         with open(md_path, "a", encoding="utf-8") as fh:
             fh.write("\n" + "\n\n".join(new) + "\n")
+    if wanted_ids is None:
+        return record_results(md_path, moved) if moved else 0
     return record_results(md_path, wanted_ids)
 
 
