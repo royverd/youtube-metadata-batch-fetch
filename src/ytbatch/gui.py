@@ -47,6 +47,7 @@ import customtkinter as ctk
 
 from . import (backups, batch_fetch, colorpicker, config, grab_watchlist, guide, paths,
                progress, render_screening, screen, settings, theme)
+from .fitscroll import FitScroll, grid_hide, install_scrollbar_fix
 
 def watchlist_digest():
     """sha256 of watchlist.txt's bytes, or None if unreadable. Run fetch and
@@ -342,7 +343,12 @@ class App:
             sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
             w, h = min(int(sw * 0.80), 2300), min(int(sh * 0.85), 1550)
             root.geometry(f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 3)}")
-        root.minsize(1000, 680)
+        # Small on purpose: below the layout's natural size the window
+        # scrolls (FitScroll) rather than refusing to shrink, which on a
+        # screen smaller than the old 1000x680 floor left parts unreachable.
+        root.minsize(400, 300)
+        self.fit = FitScroll(root, self.c("bg"), self.c("line"), self.c("muted"),
+                             min_size=self._min_shell_size)
         if self.ui.get("fullscreen"):
             root.attributes("-fullscreen", True)
         root.bind("<F11>", lambda _e: self.toggle_fullscreen())
@@ -499,10 +505,19 @@ class App:
         return 220 + max(0, self.font_size() - 14) * 14
 
 
+    # Hints and subtitles wrap here instead of running on as one line. A
+    # 1300 px subtitle set the narrowest the window could go before it had
+    # to scroll sideways. Fixed, not the parent's width: wrapping to the
+    # current width would make the text ask for exactly that width, and the
+    # window could then never get narrower than it already was.
+    HINT_WRAP = 640
+
     def label(self, parent, text="", kind="body", **kw):
         quiet = kind in ("muted", "small")
         kw.setdefault("anchor", "w")
         kw.setdefault("justify", "left")
+        if quiet:
+            kw.setdefault("wraplength", self.HINT_WRAP)
         kw.setdefault("text_color", self.c("muted" if quiet else "fg"))
         return ctk.CTkLabel(parent, text=text, font=self.fonts.get(kind, self.fonts["body"]), **kw)
 
@@ -578,6 +593,8 @@ class App:
         else:
             pack.setdefault("fill", "x")
             pack.setdefault("pady", (0, 14))
+            if isinstance(parent, ctk.CTkScrollableFrame):
+                pack.setdefault("padx", (0, 8))  # clear of the page's scrollbar
             outer.pack(**pack)
         if title:
             head = ctk.CTkFrame(outer, fg_color="transparent")
@@ -648,7 +665,9 @@ class App:
     def _build_widgets(self):
         self._action_btns = []
         self.root.configure(fg_color=self.c("bg"))
-        shell = self.shell = ctk.CTkFrame(self.root, fg_color=self.c("bg"), corner_radius=0)
+        self.fit.set_bg(self.c("bg"), self.c("line"), self.c("muted"))
+        self.fit.unfollow_all()  # the old pages died with the old shell
+        shell = self.shell = ctk.CTkFrame(self.fit.inner, fg_color=self.c("bg"), corner_radius=0)
         shell.pack(fill="both", expand=True)
         shell.grid_columnconfigure(1, weight=1)
         shell.grid_rowconfigure(0, weight=1)
@@ -666,7 +685,9 @@ class App:
         body.pack(side="top", fill="both", expand=True)
         body.grid_columnconfigure(0, weight=1)
         body.grid_rowconfigure(1, weight=1)
-        body.bind("<Configure>", self._fit_drawer)
+        # Coalesced: a drag delivers a Configure per pixel, and fitting on
+        # each one, each forcing a relayout, was most of the resize lag.
+        body.bind("<Configure>", self._schedule_fit_drawer)
         self._drawer_h = None
 
         header = self.header = ctk.CTkFrame(body, fg_color="transparent")
@@ -688,7 +709,9 @@ class App:
         }
         for page in self.pages.values():
             page.grid(row=0, column=0, sticky="nsew")
-            page.grid_remove()
+            grid_hide(page)
+            if isinstance(page, ctk.CTkScrollableFrame):
+                self.fit.follow(page)
 
         # Drag handle for the drawer height; replaces the old paned sash.
         self.grip = ctk.CTkFrame(body, height=10, fg_color="transparent", cursor="sb_v_double_arrow")
@@ -886,7 +909,7 @@ class App:
             key = "fetch"
         for name, page in self.pages.items():
             if name != key:
-                page.grid_remove()
+                grid_hide(page)
         self.pages[key].grid()
         for name, btn in self.nav_btns.items():
             on = name == key
@@ -896,11 +919,12 @@ class App:
         self.page_title.configure(text=title)
         self.page_sub.configure(text=sub)
         self.ui["page"] = key
+        self._fit_drawer()  # pages differ in what they ask for
 
     def _set_log_open(self, open_, save=True):
         self.ui["log_open"] = bool(open_)
         for widget in (self.drawer, self.grip):
-            widget.grid() if open_ else widget.grid_remove()
+            widget.grid() if open_ else grid_hide(widget)
         self.log_toggle.configure(text="Hide log" if open_ else "Show log")
         if open_:
             self._fit_drawer()
@@ -915,22 +939,74 @@ class App:
     def _page_min_height(self):
         return max(self.PAGE_MIN_HEIGHT, 18 * self.font_size())
 
-    def _fit_drawer(self, _event=None):
+    def _schedule_fit_drawer(self, _event=None):
+        if not getattr(self, "_fit_pending", False):
+            self._fit_pending = True
+            self.root.after_idle(lambda: self._fit_drawer(settle=False))
+
+    def _fit_drawer(self, _event=None, settle=True):
         """Shows the drawer at the saved height or at what's left after the
         page's minimum, whichever is smaller. The saved height isn't touched,
         so a bigger window gets the full drawer back. A 690 px drawer with a
-        23 px font used to squeeze the page to nothing in a 900 px window."""
+        23 px font used to squeeze the page to nothing in a 900 px window.
+
+        The page is owed the larger of the floor and what the page on show
+        actually asks for: the Review table asks for more than the floor,
+        and giving it only the floor squeezed it while the drawer sat at
+        full height. Everything is measured in screen pixels and converted
+        back once for the textbox, which scales whatever it is given."""
+        self._fit_pending = False  # first: every return below must re-arm it
         body = getattr(self, "body", None)
-        if body is None or not self.ui.get("log_open", True):
+        # Configure can fire mid-build, before the drawer exists.
+        if (body is None or not self.ui.get("log_open", True)
+                or not getattr(self, "drawer", None) or not self.drawer.winfo_exists()):
             return
-        body.update_idletasks()
+        # Direct callers (page switch, log toggle, grip) need sizes that
+        # include what they just changed. From an idle pass after a resize,
+        # the sizes are already current and settling again only costs.
+        if settle:
+            body.update_idletasks()
+        px = body._apply_widget_scaling
+        page = self.pages.get(self.ui.get("page")) if hasattr(self, "pages") else None
+        page_need = max(px(self._page_min_height()), page.winfo_reqheight() if page else 0)
         chrome = max(0, self.drawer.winfo_reqheight() - self.log.winfo_reqheight())
-        room = (body.winfo_height() - self.header.winfo_reqheight() - 16
-                - self._page_min_height() - self.grip.winfo_reqheight() - chrome)
-        height = max(80, min(int(self.ui.get("log_height") or 180), room))
+        room = (body.winfo_height() - self.header.winfo_reqheight() - px(16)
+                - page_need - self.grip.winfo_reqheight() - chrome)
+        height = max(80, min(int(self.ui.get("log_height") or 180),
+                             int(self.log._reverse_widget_scaling(room))))
         if height != self._drawer_h:
             self._drawer_h = height
             self.log.configure(height=height)
+
+    def _min_shell_size(self):
+        """Pixels below which the window scrolls instead of squeezing.
+
+        The shell's requested size, with two corrections. The log drawer
+        gives way first (_fit_drawer), so it counts at its minimum height,
+        not its current one; otherwise a short window would scroll where it
+        used to shrink the drawer. And the sidebar is a fixed-size frame,
+        which requests whatever it was configured to rather than what its
+        contents need, so its contents are added up here - squeezed, the
+        theme switch and Guide slid up over the page buttons."""
+        shell = getattr(self, "shell", None)
+        if (shell is None or not shell.winfo_exists()
+                or not getattr(self, "drawer", None) or not self.drawer.winfo_exists()):
+            return 1, 1  # mid-build; the next tick has the real answer
+        w, h = shell.winfo_reqwidth(), shell.winfo_reqheight()
+        if self.ui.get("log_open", True):
+            log_min = self.log._apply_widget_scaling(80)
+            h -= max(0, self.log.winfo_reqheight() - log_min)
+        side = 0
+        for child in self.sidebar.pack_slaves():
+            # pady comes back as 4, "4", (26, 0) or "26 0" depending on how
+            # it was set; one value means both sides.
+            pad = [int(float(p)) for p in re.findall(r"\d+(?:\.\d+)?",
+                                                       str(child.pack_info().get("pady", 0)))]
+            side += child.winfo_reqheight() + (sum(pad) if len(pad) == 2 else 2 * sum(pad))
+        # Breathing room between the page buttons and the bottom group,
+        # which pack leaves only when there is space to spare.
+        side += self.sidebar._apply_widget_scaling(24)
+        return w, max(h, side)
 
     def _toggle_log(self):
         self._set_log_open(not self.ui.get("log_open", True))
@@ -943,8 +1019,15 @@ class App:
         self.ui["log_height"] = max(80, min(700, self._grip_h - (e.y_root - self._grip_y)))
         self._fit_drawer()
 
+    def _scroll_page(self, holder):
+        """Pages scroll: a short window or a tall log drawer would otherwise
+        cut the lower cards and their buttons off with no way to reach them."""
+        return ctk.CTkScrollableFrame(holder, fg_color="transparent",
+                                      scrollbar_button_color=self.c("line"),
+                                      scrollbar_button_hover_color=self.c("muted"))
+
     def _build_fetch_page(self, holder):
-        page = ctk.CTkFrame(holder, fg_color="transparent")
+        page = self._scroll_page(holder)
 
         body = self.card(page, "Watchlist", "Reads video IDs from a playlist through a browser "
                                             "you're logged in to. Close that browser first.")
@@ -971,7 +1054,7 @@ class App:
             self.label(body, desc, "muted").grid(row=row, column=1, sticky="w", padx=(18, 0))
 
         actions = ctk.CTkFrame(page, fg_color="transparent")
-        actions.pack(fill="x", pady=(2, 0))
+        actions.pack(fill="x", pady=(2, 0), padx=(0, 8))
         self.run_btn = self.button(actions, "Run fetch", self.on_run, kind="primary",
                                    action=True, width=140)
         self.run_btn.pack(side="left")
@@ -983,7 +1066,7 @@ class App:
              ("rated", "Rated", "fg"))
 
     def _build_screen_page(self, holder):
-        page = ctk.CTkFrame(holder, fg_color="transparent")
+        page = self._scroll_page(holder)
 
         body = self.card(page, "Screen with AI")
         self.screen_sub = self.label(body, "", "muted")
@@ -1057,7 +1140,21 @@ class App:
         cols = tuple(c[0] for c in self.REVIEW_COLS)
         # extended, not browse: ctrl-click adds, shift-click takes a run, and
         # Save then applies one decision to the whole selection.
-        self.tree = ttk.Treeview(inner, columns=cols, show="headings", height=12,
+        # height is the table's floor, not its size: the grid weight stretches
+        # it to fill the page. 6 rows keeps the window from scrolling as a
+        # whole long before the table itself runs out of room to scroll.
+        # The table asks for the sum of its column widths - 1900 px with
+        # saved widths - and _fit_columns shrinks them to whatever it gets
+        # anyway, so that request is meaningless; passed up, it made the whole
+        # window scroll sideways. This frame stops it: it asks for no width
+        # and only the table's height (_fit_tree_clip), and the table fills it.
+        clip = self._tree_clip = tk.Frame(inner, bd=0, highlightthickness=0,
+                                          width=1, height=1, background=theme.P["card"])
+        clip.grid(row=0, column=0, sticky="nsew")
+        clip.grid_propagate(False)
+        clip.grid_rowconfigure(0, weight=1)
+        clip.grid_columnconfigure(0, weight=1)
+        self.tree = ttk.Treeview(clip, columns=cols, show="headings", height=6,
                                  selectmode="extended")
         for col, name, width, minwidth, anchor in self.REVIEW_COLS:
             # Heading anchor is separate from the column's: setting only the
@@ -1073,7 +1170,7 @@ class App:
         scroll = ctk.CTkScrollbar(inner, command=self.tree.yview, fg_color="transparent",
                                   button_color=self.c("line"), button_hover_color=self.c("muted"))
         self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.grid(row=0, column=0, sticky="nsew", in_=clip)
         scroll.grid(row=0, column=1, sticky="ns", padx=(6, 0))
         self.tree.bind("<<TreeviewSelect>>", self.on_select_video)
         self.tree.bind("<Double-1>", lambda _e: self.on_open_video())
@@ -1107,6 +1204,18 @@ class App:
             self.tree.tag_configure(f"ai-{slug}", foreground=colour)
         # Faint zebra striping: long rows of same-coloured text lose their line.
         self.tree.tag_configure("odd", background=theme.mix(theme.P["card"], theme.P["fg"], 0.04))
+        self._fit_tree_clip()
+
+    def _fit_tree_clip(self):
+        """The clip frame's height follows the table's request, which moves
+        with font size and scale; its width stays out of it on purpose."""
+        clip = getattr(self, "_tree_clip", None)
+        if clip is None or not clip.winfo_exists():
+            return
+        clip.configure(background=theme.P["card"])
+        self.tree.update_idletasks()
+        if clip.winfo_reqheight() != self.tree.winfo_reqheight():
+            clip.configure(height=self.tree.winfo_reqheight())
 
     def _fit_columns(self, event):
         """Saved widths from a wider window push the last columns off the
@@ -1121,9 +1230,7 @@ class App:
             self.tree.column(col, width=max(minwidth, int(widths[col] * factor)))
 
     def _build_settings_page(self, holder):
-        page = ctk.CTkScrollableFrame(holder, fg_color="transparent",
-                                      scrollbar_button_color=self.c("line"),
-                                      scrollbar_button_hover_color=self.c("muted"))
+        page = self._scroll_page(holder)
 
         body = self.card(page, "Paths", "Blank fields are re-detected on each start.",
                          padx=(0, 8), action=("Reset to defaults", self.reset_paths))
@@ -1261,7 +1368,7 @@ class App:
         mode = self.ai_mode.get()
         shown, hidden = ((self.ai_api_frame, self.ai_sub_frame) if mode == "api"
                          else (self.ai_sub_frame, self.ai_api_frame))
-        hidden.grid_remove()
+        grid_hide(hidden)
         shown.grid(row=1, column=0, sticky="ew")
         if initial or self.cfg.get("screen_mode") == mode:
             return
@@ -1963,6 +2070,7 @@ class App:
         the ttk table has to be repainted."""
         self.ui["theme"] = mode
         ctk.set_appearance_mode(mode)
+        self.fit.set_bg(self.c("bg"))  # its plain Tk canvas has no light/dark pair
         self._theme_apply()
         self._style_tree()
         for seg in (self.side_theme, self.settings_theme):

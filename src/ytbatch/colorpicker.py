@@ -28,6 +28,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from . import theme
+from .fitscroll import FitScroll
 
 SQUARE = 220
 HUE_H = 16
@@ -362,7 +363,10 @@ class ColorEditor:
         win = self.win = ctk.CTkToplevel(app.root)
         win.title("Colours")
         win.geometry("980x780")
-        win.minsize(820, 520)
+        # Small: below the editor's natural size the window scrolls rather
+        # than refusing to shrink past a floor bigger than some screens.
+        win.minsize(360, 260)
+        self.fit = FitScroll(win, app.c("bg"), app.c("line"), app.c("muted"))
         self._build()
         win.after(100, win.lift)
 
@@ -465,9 +469,11 @@ class ColorEditor:
         being edited, same as the main window's."""
         app = self.app
         self.win.configure(fg_color=app.c("bg"))
+        self.fit.set_bg(app.c("bg"), app.c("line"), app.c("muted"))
+        self.fit.unfollow_all()
         if self.body is not None:
             self.body.destroy()
-        body = self.body = ctk.CTkFrame(self.win, fg_color="transparent")
+        body = self.body = ctk.CTkFrame(self.fit.inner, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=22, pady=18)
 
         top = ctk.CTkFrame(body, fg_color="transparent")
@@ -503,6 +509,7 @@ class ColorEditor:
                                       scrollbar_button_color=app.c("line"),
                                       scrollbar_button_hover_color=app.c("muted"))
         grid.pack(fill="both", expand=True)
+        self.fit.follow(grid)
         pal = self.palette()
         r = 0
         for group, roles in theme.ROLES:

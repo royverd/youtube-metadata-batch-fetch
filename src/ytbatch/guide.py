@@ -15,6 +15,8 @@ Deps: customtkinter.
 
 import customtkinter as ctk
 
+from .fitscroll import FitScroll
+
 WRAP = 700  # px; the window is fixed-ish, and long lines are what makes help unreadable
 
 
@@ -35,10 +37,12 @@ class Guide:
         win.title("ytbatch guide")
         self._auto_size = self._fit_to_screen()
         win.geometry(self._centred(app.ui.get("guide_geometry")) or self._auto_size)
-        # Pages scroll vertically only, so the floor is set by the widest row
-        # (the Review demo's status buttons), not by the height.
-        win.minsize(920, 480)
+        # Small: narrower than the widest row (the Review demo's status
+        # buttons) or shorter than the footer, the window scrolls instead.
+        win.minsize(360, 260)
         win.configure(fg_color=app.c("bg"))
+        self.fit = FitScroll(win, app.c("bg"), app.c("line"), app.c("muted"))
+        host = self.fit.inner
         win.transient(app.root)
         win.protocol("WM_DELETE_WINDOW", self.close)
         win.bind("<Left>", lambda _e: self.go(self.index - 1))
@@ -48,15 +52,16 @@ class Guide:
         # Footer packed first, at the bottom: pack hands out space in order, so
         # this reserves it before the page takes the rest. Packed after the
         # body, a short window clipped the buttons off instead of the content.
-        footer = ctk.CTkFrame(win, fg_color="transparent", height=60)
+        footer = ctk.CTkFrame(host, fg_color="transparent", height=60)
         footer.pack(side="bottom", fill="x", padx=36, pady=(8, 22))
 
         # Scrollable, so a page taller than the window scrolls rather than
         # pushing anything out of reach.
-        self.body = ctk.CTkScrollableFrame(win, fg_color="transparent",
+        self.body = ctk.CTkScrollableFrame(host, fg_color="transparent",
                                            scrollbar_button_color=app.c("line"),
                                            scrollbar_button_hover_color=app.c("muted"))
         self.body.pack(side="top", fill="both", expand=True, padx=(36, 20), pady=(30, 0))
+        self.fit.follow(self.body)
         self.skip_btn = app.button(footer, "Skip guide", self.close, kind="ghost")
         self.skip_btn.pack(side="left")
         self.next_btn = app.button(footer, "Next", lambda: self.go(self.index + 1),
