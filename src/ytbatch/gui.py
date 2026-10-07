@@ -235,8 +235,21 @@ class FlowRow(ctk.CTkFrame):
 
     def add(self, widget, gap=None):
         self._items.append((widget, self.gap if gap is None else gap))
-        self.after_idle(self._reflow)
+        # An item that changes size after placement (a label's text, a
+        # scale change landing late) must re-wrap the row: only reflowing on
+        # the row's own width left the last button hanging off the right
+        # edge or a wrapped line below the row's bottom.
+        # Tk-level bind: CTk widgets reroute bind() to their inner canvas,
+        # and CTkSegmentedButton refuses it outright. The outer frame is the
+        # one whose size changes.
+        tk.Misc.bind(widget, "<Configure>", lambda _e: self._schedule_reflow(), "+")
+        self._schedule_reflow()
         return widget
+
+    def _schedule_reflow(self):
+        if not getattr(self, "_reflow_pending", False):
+            self._reflow_pending = True
+            self.after_idle(self._reflow)
 
     def _on_configure(self, event):
         if event.width != self._width:
@@ -244,6 +257,7 @@ class FlowRow(ctk.CTkFrame):
             self._reflow()
 
     def _reflow(self):
+        self._reflow_pending = False
         if not self.winfo_exists():
             return
         width = self._width or self.winfo_width()
@@ -265,15 +279,31 @@ class FlowRow(ctk.CTkFrame):
         for i, line in enumerate(lines):
             line_h = max(widget.winfo_reqheight() for widget, _ in line)
             for widget, left in line:
-                widget.place(x=left, y=y + (line_h - widget.winfo_reqheight()) // 2)
+                # Tk's place, not CTk's: CTk scales x and y, and these are
+                # already screen pixels - at 150% every item landed half as
+                # far again to the right and down, off the end of its row.
+                tk.Place.place_configure(widget, x=left,
+                                         y=y + (line_h - widget.winfo_reqheight()) // 2)
             y += line_h + (self.vgap if i < len(lines) - 1 else 0)
+        # The widest single item is the narrowest this row can get by
+        # wrapping, so that is its requested width; a scroller above reads it
+        # to know when the window has gone too narrow. Measured in pixels,
+        # while configure() takes the unscaled size and scales it again - at
+        # any interface scale but 100 the row came out that much too tall.
         height = y
+        widest = max((widget.winfo_reqwidth() for widget, _ in self._items), default=0)
+        size = {}
         if height and abs(self.winfo_reqheight() - height) > 1:
-            self.configure(height=height)
+            size["height"] = self._reverse_widget_scaling(height)
+        if widest and abs(self.winfo_reqwidth() - widest) > 1:
+            size["width"] = self._reverse_widget_scaling(widest)
+        if size:
+            self.configure(**size)
 
 
 class App:
     def __init__(self, root):
+        install_scrollbar_fix()  # before any scrollbar exists
         self.root = root
         self.log_queue = queue.Queue()
         self.stop_event = threading.Event()
