@@ -189,14 +189,28 @@ def fetch(ids, stop_event=None):
     than waiting for a long batch to finish - whatever already streamed back is
     still returned and kept, since it's a resumable partial result like any other."""
     urls = [f"https://www.youtube.com/watch?v={i}" for i in ids]
+    # URLs go in on stdin, not argv: Windows caps a command line at 32,767
+    # chars, and ~750 URLs blow past it (WinError 206, which is a
+    # FileNotFoundError and so got reported as a "missing file").
     proc = subprocess.Popen(
-        ["yt-dlp", "--dump-json", "--skip-download", "--ignore-errors", *urls],
+        ["yt-dlp", "--dump-json", "--skip-download", "--ignore-errors", "--batch-file", "-"],
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",  # yt-dlp's stderr has thrown non-UTF-8 bytes before (e.g. curly quotes) - never crash on it
     )
+
+    def feed_stdin():
+        # Own thread so a full stdin pipe can never stall the stdout read below.
+        try:
+            proc.stdin.write("\n".join(urls) + "\n")
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass  # yt-dlp died or was stopped early; its stderr says why
+    stdin_thread = threading.Thread(target=feed_stdin, daemon=True)
+    stdin_thread.start()
 
     stderr_lines = []
     stderr_thread = threading.Thread(target=lambda: stderr_lines.extend(proc.stderr), daemon=True)
@@ -222,6 +236,7 @@ def fetch(ids, stop_event=None):
         # most recent one. The GUI's progress bar is the live counter.
         print(f"[{len(records)}/{len(ids)}] {label}"[:120], flush=True)
     proc.wait()
+    stdin_thread.join()
     stderr_thread.join()
     print()  # close off the live line before the summary
 
