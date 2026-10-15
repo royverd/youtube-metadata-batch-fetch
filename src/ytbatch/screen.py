@@ -229,6 +229,41 @@ def agent_bin(cfg, name):
     return override or shutil.which(AGENTS[name][0]) or ""
 
 
+_claude_ready = set()  # binaries already confirmed signed in this app session
+
+
+def check_agent_ready(name, binary):
+    """Raise ScreenError if the CLI isn't actually usable. Otherwise the
+    terminal opens on a missing file or a sign-in screen, and the app waits
+    on results that will never come.
+
+    Sign-in is only checked for claude: `claude auth status` reports it as
+    JSON. The other CLIs have no equivalent this has been run against."""
+    resolved = shutil.which(binary) or (binary if os.path.isfile(binary) else "")
+    if not resolved:
+        raise ScreenError(f"{name} not found at {binary!r}. Install it, or fix its path in Settings.")
+    if name != "claude" or resolved in _claude_ready:
+        return
+    try:
+        out = subprocess.run([resolved, "auth", "status", "--json"], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace", timeout=20)
+    except subprocess.TimeoutExpired:
+        raise ScreenError("claude didn't answer `claude auth status` within 20s. "
+                          "Run claude in a terminal once to finish setting it up.")
+    except OSError as e:
+        raise ScreenError(f"claude at {resolved} couldn't be run: {e}")
+    try:
+        logged_in = json.loads(out.stdout).get("loggedIn")
+    except (json.JSONDecodeError, AttributeError):
+        # A CLI too old for `auth status` says nothing either way; don't
+        # block a setup that may well work on a guess.
+        return
+    if not logged_in:
+        raise ScreenError("claude is installed but not signed in. Open the Claude terminal "
+                          "(or run `claude` once) and sign in, then try again.")
+    _claude_ready.add(resolved)
+
+
 def batch_size(cfg):
     try:
         return max(1, int(cfg.get("screen_batch") or DEFAULT_BATCH))
@@ -430,7 +465,8 @@ def launch_agent(n, cfg):
     name = backend(cfg)
     binary = agent_bin(cfg, name)
     if not binary:
-        raise ScreenError(f"{name} not found on PATH. Set its path in Settings.")
+        raise ScreenError(f"{name} not found on PATH. Install it, or set its path in Settings.")
+    check_agent_ready(name, binary)
     if terminal_command(".", ["true"]) is None:
         raise ScreenError("No supported terminal emulator found. Tried: "
                           + ", ".join(t for t, _ in TERMINALS))
