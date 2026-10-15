@@ -33,6 +33,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import urllib.parse
 import urllib.request
 
@@ -89,6 +90,13 @@ FREE_PROXY_REFRESH_MINUTES = 30
 PROXY_OK_STRIKES = 3
 PROXY_RETRY_HOURS = 24
 FREE_PROXY_TIMEOUT = 8
+# A proxy is needed -> this many candidates are tried at once on the video in
+# hand, and the first to answer becomes the current proxy. Trying them one by
+# one cost up to FREE_PROXY_TIMEOUT per dead proxy, and most are dead, so
+# finding a live one could take tens of minutes. Racing is done fresh at each
+# point of need, not up front, because free proxies die or get blocked within
+# minutes and a list tested at start-up goes stale mid-run.
+PROXY_RACE_SIZE = 50
 
 # yt-dlp's full dump is ~99% download plumbing (formats, automatic_captions,
 # thumbnails, heatmap) that's useless for backlog triage and bloats the JSON to
@@ -368,6 +376,62 @@ class ApiPool:
             if self.keys[self.idx] is None or self.keys[self.idx] not in self.failed_keys:
                 return True
         return False
+
+    def can_race(self):
+        # Only the generic pool has per-proxy keys. Webshare rotates IPs
+        # behind one gateway, so there is nothing to race there.
+        return any(self.keys)
+
+    def race(self, video_id, fetch, stop_event=None, size=PROXY_RACE_SIZE):
+        """Fetch video_id through up to `size` untried proxies at once and
+        switch to whichever answers first. The probe is the real request, so
+        the winner has just proven it can reach YouTube right now (not merely
+        that it is alive) and its result is the video's, not wasted.
+
+        Returns the fetch result, or None once every proxy has failed or Stop
+        was pressed. Proxies still in flight when one wins are left untried;
+        their threads run out on their own timeout."""
+        if self.keys[self.idx]:
+            self.failed_keys.add(self.keys[self.idx])
+        tried = set()
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return None
+            batch = [j for j, k in enumerate(self.keys)
+                     if k and k not in self.failed_keys and j not in tried][:size]
+            if not batch:
+                return None
+            tried.update(batch)
+            print(f"  racing {len(batch)} proxies on {video_id}...", flush=True)
+            ex = ThreadPoolExecutor(max_workers=len(batch))
+            t0 = time.time()
+            pending = {ex.submit(fetch, self.apis[j], video_id): j for j in batch}
+            winner = None
+            try:
+                while pending and winner is None:
+                    done, _ = wait(pending, timeout=1, return_when=FIRST_COMPLETED)
+                    if stop_event is not None and stop_event.is_set():
+                        return None
+                    for fut in done:
+                        j = pending.pop(fut)
+                        try:
+                            result = fut.result()
+                        except Exception:
+                            result = ("", 0, "error", "")
+                        if winner is None and result[2] not in ("blocked", "error"):
+                            winner = (j, result, time.time() - t0)
+                        elif result[2] in ("blocked", "error"):
+                            self.failed_keys.add(self.keys[j])
+            finally:
+                # Don't wait on the stragglers: dead proxies take a full timeout.
+                ex.shutdown(wait=False, cancel_futures=True)
+            if winner:
+                j, result, elapsed = winner
+                self.idx = j
+                self.ok_keys.add(self.keys[j])
+                self.latencies[self.keys[j]] = elapsed
+                print(f"  {self.labels[j]} answered first ({elapsed:.1f}s) - using it", flush=True)
+                return result
 
 
 def read_proxies(path):
@@ -870,8 +934,9 @@ def transcript_pass(records, pool, stop_event=None):
     immediately - this is evaluated fresh every iteration since rotation
     changes which kind of entry is current.
 
-    On a failure, tries pool.rotate() first - if there's another proxy to fall
-    back to, the same video is retried on it rather than being marked done.
+    On a failure with a generic proxy pool, pool.race() tries the same video
+    on a batch of proxies at once and keeps whichever answers first; other
+    pools fall back to pool.rotate(), retrying the video on the next entry.
     Only stops for good once rotate() reports nothing left to try. Progress is
     saved either way (records are mutated in place and written by the
     caller), so a later re-run resumes exactly where this left off. Ctrl-C is
@@ -942,7 +1007,25 @@ def transcript_pass(records, pool, stop_event=None):
                     reason = f"{consecutive_errors} errors in a row"
                 else:
                     reason = "error"  # no tolerance here, so this is always the first and only one
-                if pool.rotate():
+                if pool.can_race():
+                    print(f"  {reason} on {old_label} - finding a working proxy")
+                    won = pool.race(rec["id"], fetch_transcript, stop_event)
+                    if won is not None:
+                        consecutive_errors = 0
+                        text, segs, status, lang = won
+                        rec["transcript_text"] = text
+                        rec["transcript_segments"] = segs
+                        rec["transcript_status"] = status
+                        rec["transcript_language"] = lang
+                        tag = f"{status}/{lang}" if lang else status
+                        print(f"[{i + 1}/{len(todo)}] {tag:11} {rec.get('title') or rec['id']} ({pool.label})"[:120],
+                              flush=True)
+                        i += 1  # settled by the race; proxies take no delay
+                        continue
+                    stopped = ("stopped by user." if stop_event is not None and stop_event.is_set()
+                               else "every proxy in the pool has now failed - none left to try.")
+                    break
+                elif pool.rotate():
                     consecutive_errors = 0
                     print(f"  {reason} on {old_label} - rotating to {pool.label}")
                     continue  # retry this same video on the newly-rotated proxy
